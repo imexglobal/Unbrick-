@@ -106,15 +106,34 @@ final class Library {
     let society: [Card]
     let interview: [Card]
     let visa: [Card]
+    /// Set when the bundled lessons could not be read, so the UI can say so instead of looking empty.
+    let loadError: String?
     private var byUnit: [Int: [Card]] = [:]
 
     private init() {
-        guard let url = Bundle.main.url(forResource: "Content", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let file = try? JSONDecoder().decode(ContentFile.self, from: data) else {
+        let decoded: ContentFile?
+        let failure: String?
+        let url = Bundle.main.url(forResource: "Content", withExtension: "json")
+            ?? Bundle.main.url(forResource: "Content", withExtension: "json", subdirectory: "Resources")
+        if let url {
+            do {
+                let data = try Data(contentsOf: url)
+                decoded = try JSONDecoder().decode(ContentFile.self, from: data)
+                failure = nil
+            } catch {
+                decoded = nil
+                failure = error.localizedDescription
+            }
+        } else {
+            decoded = nil
+            failure = "Content.json is missing from the app bundle."
+        }
+        guard let file = decoded else {
             units = []; book = []; society = []; interview = []; visa = []
+            loadError = failure ?? "Could not read lessons."
             return
         }
+        loadError = file.units.isEmpty ? "Content.json has no units." : nil
         units = file.units
         var cards: [Card] = []
         for u in file.units {

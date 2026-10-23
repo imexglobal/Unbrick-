@@ -3,13 +3,13 @@ import Foundation
 import FoundationModels
 #endif
 
-/// One place for AI: Claude when the learner has added an API key, otherwise Apple's on-device model
-/// (Apple Intelligence, free and offline). Both return the same dictionary shape the UI already reads.
+/// One place for AI: Claude through the Unbrick server when this build has a proxy URL and app token,
+/// otherwise Apple's on-device model (Apple Intelligence, free and offline). Both return the same dictionary shape.
 enum AI {
     enum Engine { case claude, onDevice, none }
 
     static var engine: Engine {
-        if APIKey.isSet { return .claude }
+        if ProxyConfig.isConfigured { return .claude }
         if onDeviceReady { return .onDevice }
         return .none
     }
@@ -24,15 +24,15 @@ enum AI {
 
     static var engineName: String {
         switch engine {
-        case .claude: return "Claude"
+        case .claude: return L.s("Claude", "Claude")
         case .onDevice: return L.s("Apple on-device AI", "ИИ Apple на устройстве")
         case .none: return L.s("Off", "Выключен")
         }
     }
 
     static var unavailableReason: String {
-        L.s("AI checking needs Apple Intelligence (Settings › Apple Intelligence & Siri › turn on) or an Anthropic API key in Profile.",
-            "Для ИИ-проверки включите Apple Intelligence (Настройки › Apple Intelligence и Siri) или добавьте ключ Anthropic в Профиле.")
+        L.s("AI checking needs Apple Intelligence (Settings › Apple Intelligence & Siri › turn on), or a build that includes the Unbrick server.",
+            "Для ИИ-проверки включите Apple Intelligence (Настройки › Apple Intelligence и Siri) или сборку с сервером Unbrick.")
     }
 
     // MARK: grading one spoken answer
@@ -40,7 +40,7 @@ enum AI {
     static func judge(system: String, prompt: String) async throws -> [String: Any] {
         switch engine {
         case .claude:
-            return try await Claude.json(system: system, messages: [["role": "user", "content": prompt]], schema: Claude.judgeSchema)
+            return try await Claude.json(system: system, messages: [["role": "user", "content": prompt]], task: "judge")
         case .onDevice:
             #if canImport(FoundationModels)
             if #available(iOS 26.0, *) {
@@ -50,9 +50,9 @@ enum AI {
                         "mistakes": r.mistakes.map { ["wrong": $0.wrong, "right": $0.right, "why": $0.why] }]
             }
             #endif
-            throw ClaudeError.noKey
+            throw ClaudeError.notConfigured
         case .none:
-            throw ClaudeError.noKey
+            throw ClaudeError.notConfigured
         }
     }
 
@@ -61,7 +61,7 @@ enum AI {
     static func tutor(system: String, turns: [[String: String]]) async throws -> [String: Any] {
         switch engine {
         case .claude:
-            return try await Claude.json(system: system, messages: turns, schema: Claude.tutorSchema)
+            return try await Claude.json(system: system, messages: turns, task: "tutor")
         case .onDevice:
             #if canImport(FoundationModels)
             if #available(iOS 26.0, *) {
@@ -74,9 +74,9 @@ enum AI {
                         "suggestions": ["casual": idea(r.casual), "polite": idea(r.polite), "formal": idea(r.formal), "note": r.note]]
             }
             #endif
-            throw ClaudeError.noKey
+            throw ClaudeError.notConfigured
         case .none:
-            throw ClaudeError.noKey
+            throw ClaudeError.notConfigured
         }
     }
 
@@ -85,7 +85,7 @@ enum AI {
     static func cards(system: String, prompt: String) async throws -> [[String: Any]] {
         switch engine {
         case .claude:
-            let r = try await Claude.json(system: system, messages: [["role": "user", "content": prompt]], schema: Claude.cardsSchema, effort: "medium")
+            let r = try await Claude.json(system: system, messages: [["role": "user", "content": prompt]], task: "cards", effort: "medium")
             return r["cards"] as? [[String: Any]] ?? []
         case .onDevice:
             #if canImport(FoundationModels)
@@ -95,9 +95,9 @@ enum AI {
                 return r.cards.map { ["t": $0.t, "m": $0.m] }
             }
             #endif
-            throw ClaudeError.noKey
+            throw ClaudeError.notConfigured
         case .none:
-            throw ClaudeError.noKey
+            throw ClaudeError.notConfigured
         }
     }
 }

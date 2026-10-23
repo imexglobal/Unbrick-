@@ -25,6 +25,11 @@ struct SetupView: View {
                     }
                     Text(t("KIIP level you're studying", "Уровень KIIP, который вы изучаете")).font(.headline)
                     Picker("", selection: $draft.level) { ForEach(0...5, id: \.self) { Text("\($0)").tag($0) } }.pickerStyle(.segmented)
+                    if draft.level != 3 {
+                        Text(t("Lessons in this version are the Level 3 book (중급 1). Other levels are saved on your goal, but their textbooks are not bundled yet.",
+                               "Уроки в этой версии — учебник 3-го уровня (중급 1). Другой уровень сохранится в цели, но его учебника в приложении пока нет."))
+                            .font(.footnote).foregroundStyle(Color.muted)
+                    }
                     Text(t("Which Level 3 unit are you on?", "Какой урок 3-го уровня проходите?")).font(.headline)
                     Picker("", selection: $draft.unit) {
                         ForEach(store.lib.units) { u in Text("\(u.n) · \(u.ko) · \(draft.lang == .ru ? u.ru : u.en)").tag(u.n) }

@@ -117,8 +117,7 @@ struct CalendarView: View {
 
 struct ProfileView: View {
     @EnvironmentObject var store: Store
-    @State private var key = ""
-    @State private var keySaved = APIKey.isSet
+    @State private var showPrivacy = false
 
     var body: some View {
         ZStack {
@@ -142,16 +141,8 @@ struct ProfileView: View {
                             Spacer()
                             Image(systemName: AI.available ? "checkmark.seal.fill" : "exclamationmark.triangle.fill").foregroundStyle(AI.available ? Color.good : .pron)
                         }
-                        Text(L.s("Free and private: Apple's on-device AI checks your answers when Apple Intelligence is on. Add an Anthropic API key to use Claude instead (stronger feedback).",
-                                 "Бесплатно и приватно: ИИ Apple на устройстве проверяет ответы, если включён Apple Intelligence. С ключом Anthropic проверяет Claude (подробнее)."))
-                            .font(.footnote).foregroundStyle(Color.muted)
-                        if keySaved {
-                            HStack { Label(L.s("Claude key saved", "Ключ Claude сохранён"), systemImage: "key.fill").foregroundStyle(Color.good); Spacer()
-                                Button(L.s("Remove", "Удалить")) { APIKey.set(nil); keySaved = false }.foregroundStyle(Color.bad) }
-                        } else {
-                            SecureField(L.s("Optional: Anthropic API key (sk-ant-…)", "Необязательно: ключ Anthropic (sk-ant-…)"), text: $key).textInputAutocapitalization(.never).autocorrectionDisabled().field()
-                            if !key.isEmpty { Button(L.s("Save key", "Сохранить ключ")) { APIKey.set(key); key = ""; keySaved = APIKey.isSet }.buttonStyle(PrimaryButton()) }
-                        }
+                        Text(aiBlurb).font(.footnote).foregroundStyle(Color.muted)
+                        Button(L.s("Privacy policy", "Политика конфиденциальности")) { showPrivacy = true }.buttonStyle(GlassButton())
                     }
                     section(L.s("Korean voice", "Корейский голос")) {
                         Text(Speaker.shared.voiceDescription).font(.subheadline.weight(.semibold))
@@ -170,6 +161,16 @@ struct ProfileView: View {
             }
             .scrollIndicators(.hidden)
         }
+        .sheet(isPresented: $showPrivacy) { PrivacyView() }
+    }
+
+    var aiBlurb: String {
+        if ProxyConfig.isConfigured {
+            return L.s("Spoken and typed answers are sent to Unbrick's server so Claude can reply. The server does not keep them. Your Anthropic key is not on this phone.",
+                       "Произнесённые и написанные ответы уходят на сервер Unbrick, чтобы ответил Claude. Сервер их не хранит. Ключ Anthropic на телефоне не хранится.")
+        }
+        return L.s("This build has no Unbrick server yet, so Claude is off. Apple Intelligence on this iPhone can still check answers when it is turned on. Nothing you say is sent to Anthropic.",
+                   "В этой сборке сервер Unbrick ещё не указан, поэтому Claude выключен. Apple Intelligence на этом iPhone может проверять ответы, если он включён. Anthropic ничего не получает.")
     }
 
     var progress: some View {

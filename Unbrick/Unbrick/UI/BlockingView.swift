@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Real blocking with iOS Screen Time: Unbrick holds the Screen Time passcode and reveals it only during an earned unlock.
 struct BlockingGuideView: View {
@@ -29,9 +30,12 @@ struct BlockingGuideView: View {
 
     var setupView: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(L.s("iOS Screen Time does the blocking. Unbrick keeps its passcode and only shows it after you pass a Korean session, so the only way past the block is speaking Korean.",
-                     "Блокирует сам iOS через «Экранное время». Unbrick хранит его код-пароль и показывает его только после пройденного занятия, так что обойти блок можно только говоря по-корейски."))
+            Text(L.s("iOS Screen Time does the blocking. Unbrick keeps its passcode on this iPhone and only shows it after you pass a Korean session.",
+                     "Блокирует сам iOS через «Экранное время». Unbrick хранит код-пароль на этом iPhone и показывает его только после пройденного занятия."))
                 .foregroundStyle(Color.muted)
+            TipBox(kind: .info, title: L.s("What this build can block", "Что умеет эта сборка"),
+                   bodyText: L.s("Unbrick cannot switch other apps off by itself until Apple approves the Family Controls entitlement. Until then, Screen Time is the block, and the tiles on Home are practice shortcuts.",
+                                 "Unbrick сам не выключает другие приложения, пока Apple не одобрит разрешение Family Controls. До этого блокирует Экранное время, а значки на главной — только тренировка."))
 
             if let code {
                 VStack(spacing: 6) {
@@ -53,7 +57,7 @@ struct BlockingGuideView: View {
                 stepList(L.s("A · Lock Screen Time with the passcode", "A · Защитите Экранное время кодом"), [
                     L.s("Open Settings › Screen Time. If it's off, tap Turn On Screen Time › Continue › This is My iPhone.", "Откройте Настройки › Экранное время. Если выключено: Включить › Продолжить › Это мой iPhone."),
                     L.s("Tap Lock Screen Time Settings (or Use Screen Time Passcode) and enter the code above twice.", "Нажмите «Защитить настройки» (или «Код-пароль Экранного времени») и введите код выше дважды."),
-                    L.s("If iOS asks for an Apple Account for passcode recovery, tap Cancel / Not Now. Entering it would let you reset the passcode and skip the block.", "Если iOS попросит Apple ID для восстановления, нажмите «Отменить» / «Не сейчас». Иначе код можно будет сбросить и обойти блок.")
+                    L.s("If iOS offers Apple Account recovery for this passcode, you can set it up or skip it. Recovery is how you get Screen Time back if you lose the passcode. Unbrick still only shows the code after a session.", "Если iOS предложит восстановление через Apple ID, его можно включить или пропустить. Так вы вернёте Экранное время, если потеряете код. Unbrick всё равно показывает код только после занятия.")
                 ])
                 stepList(L.s("B · Block your apps", "B · Заблокируйте приложения"), [
                     L.s("Settings › Screen Time › App Limits › Add Limit.", "Настройки › Экранное время › Лимиты приложений › Добавить лимит."),

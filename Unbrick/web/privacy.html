@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unbrick privacy policy</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0 auto; max-width: 42rem; padding: 2rem 1.25rem 4rem; font: 1.05rem/1.55 system-ui, sans-serif; }
+  h1 { font-size: 1.8rem; line-height: 1.2; }
+  h2 { font-size: 1.15rem; margin-top: 2rem; }
+  a { color: inherit; }
+  .todo { padding: .75rem 1rem; border: 1px solid #c9a400; border-radius: 8px; }
+</style>
+</head>
+<body>
+<p class="todo"><strong>Before you publish this page,</strong> replace the legal name and the contact email marked below, then put the public URL in <code>UNBRICK_PRIVACY_URL</code> in <code>Unbrick/Config/Info.plist</code> and in App Store Connect / Play Console. Last updated 23 October 2026.</p>
+
+<h1>Unbrick privacy policy</h1>
+<p>Unbrick is a Korean study app. This policy covers the iOS app, the Android scaffold, and the small server that asks Claude for feedback. The operator is <strong>[legal name of the developer or company]</strong>, the owner of bundle id <code>com.imexglobalintl.unbrick</code>. Contact: <strong>[support email]</strong>.</p>
+
+<h2>What stays on your phone</h2>
+<ul>
+  <li>Study progress (scores, streak, the unit you are on, cards you added) is stored in the app’s files on the device.</li>
+  <li>If you create a Screen Time passcode inside Unbrick, it is stored in the iOS Keychain on that device. It is not sent to the server.</li>
+  <li>A short microphone clip is saved in a temporary file so you can replay what you said. The operating system clears temporary files.</li>
+  <li>There is no Unbrick account. The app does not ask for your name, email, contacts, photos, or location.</li>
+</ul>
+
+<h2>Microphone and speech</h2>
+<p>The microphone is used so you can speak Korean answers. Speech Recognition turns that audio into text. When the Korean on-device speech model is installed, recognition stays on the device. When it is not, Apple’s speech service may receive the audio. Unbrick does not upload the audio file to its own server.</p>
+
+<h2>Claude</h2>
+<p>Some builds send the text of your answer and the lesson prompt to an Unbrick server, which forwards them to Anthropic’s Claude API and returns the feedback. The server is built not to store the prompt, the answer, or the reply. It does use your IP address for a short rate limit so the API key cannot be abused. The Anthropic API key is only on the server. It is not in the app.</p>
+<p>Until that server address is configured, the iOS app does not call Claude. If Apple Intelligence is on, grading can happen on the device instead, and that text is not sent to Anthropic.</p>
+<p>Anthropic’s own terms apply to text that reaches Claude. See <a href="https://www.anthropic.com/legal/privacy">Anthropic’s privacy policy</a>.</p>
+
+<h2>Notifications</h2>
+<p>If you allow notifications, Unbrick schedules one local notification for the moment an unlock window ends. Unbrick does not use remote push, and it does not run an advertising or analytics SDK.</p>
+
+<h2>App blocking</h2>
+<p>On iOS, blocking other apps is done by Screen Time, which you turn on yourself. A direct block from inside Unbrick needs Apple’s Family Controls entitlement. That entitlement is not enabled in the project until Apple approves it. App selections for Family Controls, once that ships, stay on the device. On Android, the scaffold does not block other apps.</p>
+
+<h2>Children</h2>
+<p>Unbrick is not directed at children under 13, and it is not a school product. Do not use it for a child if you are not comfortable with speech recognition and, when Claude is enabled, text being sent to the server described above.</p>
+
+<h2>Retention and deletion</h2>
+<p>Delete the app to remove on-device progress and the Keychain passcode entry. The server does not keep a profile to delete. Rate-limit counters expire within about a minute.</p>
+
+<h2>Tracking</h2>
+<p>Unbrick does not track you across other companies’ apps or websites, and it does not use your data for advertising.</p>
+
+<p><a href="unbrick.html">Back</a></p>
+</body>
+</html>

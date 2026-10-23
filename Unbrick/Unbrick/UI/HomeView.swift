@@ -79,14 +79,19 @@ struct HomeView: View {
                         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.good.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
                     } else {
-                        Text(L.s("\(blocked) apps open. They brick again at zero.", "Открыто приложений: \(blocked). При нуле снова блокировка.")).foregroundStyle(Color.muted)
+                        Text(store.state.screenTimeReady
+                             ? L.s("Screen Time passcode is hidden until you earn an unlock. These tiles are practice shortcuts.", "Код Экранного времени скрыт, пока вы не заработаете разблокировку. Эти значки — только тренировка.")
+                             : L.s("\(blocked) practice shortcuts. They brick again at zero. They do not close other apps.", "Тренировочных ярлыков: \(blocked). При нуле снова щит. Другие приложения сами не закрываются."))
+                            .foregroundStyle(Color.muted)
                     }
                     Button(L.s("Lock now", "Заблокировать")) { store.relock() }.buttonStyle(GlassButton())
                 } else {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(L.s("Bricked", "Заблокировано")).font(.system(size: 40, weight: .heavy))
-                            Text(L.s("\(blocked) apps blocked · \(store.state.intensity.minutes) min per unlock", "Заблокировано: \(blocked) · \(store.state.intensity.minutes) мин за раз"))
+                            Text(store.state.screenTimeReady
+                                 ? L.s("Screen Time is on · \(store.state.intensity.minutes) min per unlock", "Экранное время включено · \(store.state.intensity.minutes) мин за раз")
+                                 : L.s("Practice shield · Screen Time is not set up yet", "Тренировочный щит · Экранное время ещё не настроено"))
                                 .font(.subheadline).foregroundStyle(Color.muted)
                         }
                         Spacer()
@@ -236,6 +241,9 @@ struct HomeView: View {
                 }
             }
             .padding(16).glass()
+            Text(L.s("Tapping a tile opens a practice shield inside Unbrick. It does not block Instagram, TikTok, or anything else. Real blocking is Screen Time, below.",
+                     "Нажатие открывает тренировочный щит внутри Unbrick и не блокирует Instagram, TikTok и остальные. Настоящая блокировка — это Экранное время ниже."))
+                .font(.caption).foregroundStyle(Color.muted)
             Button { store.launch = .blocking } label: {
                 Label(store.state.screenTimeReady ? L.s("Real blocking is on (Screen Time)", "Блокировка включена (Экранное время)") : L.s("Turn on real blocking", "Включить настоящую блокировку"),
                       systemImage: store.state.screenTimeReady ? "lock.shield.fill" : "lock.shield")

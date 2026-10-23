@@ -1,0 +1,4 @@
+# Copy the two UNBRICK lines into android/local.properties (created by Android Studio, gitignored).
+# Use the same values as the Cloudflare worker and the iOS Info.plist.
+UNBRICK_API_BASE=https://your-worker.workers.dev
+UNBRICK_APP_TOKEN=same-value-as-APP_TOKEN
