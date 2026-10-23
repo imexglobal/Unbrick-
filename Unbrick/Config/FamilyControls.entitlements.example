@@ -12,6 +12,11 @@
   3. Request authorization with AuthorizationCenter for .individual and apply
      shields with ManagedSettings. A Device Activity Monitor extension is what
      re-applies the shield when the app is not running. See LAUNCH.md.
+  4. Add NSFamilyControlsUsageDescription back to Unbrick/Config/Info.plist.
+     It was removed from the public build so review does not see a Family
+     Controls purpose string for an API this binary does not call. Suggested
+     string: Unbrick uses Screen Time access to block the apps you pick until
+     you finish a Korean practice session.
 -->
 <plist version="1.0">
 <dict>

@@ -203,7 +203,7 @@ final class Store: ObservableObject {
             guard granted else { return }
             let content = UNMutableNotificationContent()
             content.title = "Unbrick"
-            content.body = L.s("Time's up. Your apps are bricked again. 화이팅!", "Время вышло. Приложения снова заблокированы. 화이팅!")
+            content.body = L.s("Time's up. Practice again to see your Screen Time passcode. 화이팅!", "Время вышло. Позанимайтесь снова, чтобы увидеть код Экранного времени. 화이팅!")
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, self.remaining), repeats: false)
             center.removePendingNotificationRequests(withIdentifiers: ["relock"])
             center.add(UNNotificationRequest(identifier: "relock", content: content, trigger: trigger))

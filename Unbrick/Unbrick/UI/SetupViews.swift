@@ -41,7 +41,7 @@ struct SetupView: View {
                     ForEach(Intensity.allCases, id: \.self) { i in
                         choice(i.title, i.detail, draft.intensity == i) { draft.intensity = i }
                     }
-                    Button(isEdit ? t("Save", "Сохранить") : t("Start blocking", "Начать блокировку")) {
+                    Button(isEdit ? t("Save", "Сохранить") : t("Continue", "Продолжить")) {
                         var s = store.state
                         s.lang = draft.lang; s.track = draft.track; s.level = draft.level; s.unit = draft.unit
                         s.intensity = draft.intensity; s.date = hasDate ? date : nil; s.setupDone = true
@@ -91,10 +91,10 @@ struct ShieldView: View {
                 Spacer()
                 Image(systemName: "lock.fill").font(.system(size: 34)).foregroundStyle(.white)
                     .frame(width: 88, height: 88).background(Circle().fill(brandGradient)).shadow(color: .accent.opacity(0.6), radius: 30)
-                Text(L.s("\(app) is bricked", "\(app) заблокирован")).font(.largeTitle.weight(.heavy)).multilineTextAlignment(.center)
+                Text(L.s("Practice lock", "Тренировочный замок")).font(.largeTitle.weight(.heavy)).multilineTextAlignment(.center)
                 let it = store.state.intensity
-                Text(L.s("Speak Korean to open it for \(it.minutes) minutes: \(it.pass) of \(it.cards) cards, a role-play, or \(it.tutor) good answers to your tutor.",
-                         "Говорите по-корейски, чтобы открыть на \(it.minutes) мин: \(it.pass) из \(it.cards) карточек, диалог или \(it.tutor) хороших ответа репетитору."))
+                Text(L.s("This screen is inside Unbrick. It does not close \(app). Speak Korean to run the unlock timer for \(it.minutes) minutes: \(it.pass) of \(it.cards) cards, a role-play, or \(it.tutor) good answers to your tutor.",
+                         "Этот экран внутри Unbrick и не закрывает \(app). Говорите по-корейски, чтобы запустить таймер на \(it.minutes) мин: \(it.pass) из \(it.cards) карточек, диалог или \(it.tutor) хороших ответа репетитору."))
                     .multilineTextAlignment(.center).foregroundStyle(Color.muted).padding(.horizontal, 12)
                 Spacer()
                 Button(L.s("Cards", "Карточки"), action: onCards).buttonStyle(PrimaryButton())

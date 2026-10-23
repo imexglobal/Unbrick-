@@ -64,6 +64,29 @@ test("health does not require a token and does not leak the key", async () => {
   assert.equal((await guarded.json()).spendGuard, true);
 });
 
+test("privacy and support pages name the publisher and do not need a token", async () => {
+  for (const path of ["/privacy", "/support"]) {
+    const res = await handleRequest(new Request(`https://unbrick.test${path}`));
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type"), /text\/html/);
+    const html = await res.text();
+    assert.match(html, /IMEX Global/);
+    assert.match(html, /hellopawfend@gmail.com/);
+    assert.equal(html.includes("[legal name"), false);
+    assert.equal(html.includes("[support email]"), false);
+    assert.equal(html.includes("sk-ant"), false);
+  }
+  const privacy = await (await handleRequest(new Request("https://unbrick.test/privacy"))).text();
+  assert.match(privacy, /install id/);
+  assert.match(privacy, /Anthropic/);
+  assert.match(privacy, /does not track/);
+  assert.match(privacy, /Family Controls API/);
+  const support = await (await handleRequest(new Request("https://unbrick.test/support"))).text();
+  assert.match(support, /href="\/privacy"/);
+  const post = await handleRequest(new Request("https://unbrick.test/privacy", { method: "POST" }));
+  assert.equal(post.status, 404);
+});
+
 test("rejects a missing or wrong app token", async () => {
   resetRateLimits();
   const missing = await handleRequest(post(judgeBody, { token: "" }), env);

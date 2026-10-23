@@ -19,20 +19,20 @@
 	<string>Unbrick uses the microphone so you can speak Korean answers and play them back.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Unbrick turns your spoken Korean into text to check pronunciation and answers.</string>
-	<key>NSFamilyControlsUsageDescription</key>
-	<string>Unbrick uses Screen Time access, after Apple approves the Family Controls entitlement, to block the apps you pick until you finish a Korean practice session.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Unbrick can reach a development server on your local network when this build is pointed at one.</string>
+	<string>Unbrick uses the local network only if this build is pointed at a study server on your network.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
 	<key>UNBRICK_API_BASE</key>
-	<string></string>
+	<string>https://unbrick-api.unbrick.workers.dev</string>
 	<key>UNBRICK_APP_TOKEN</key>
 	<string></string>
 	<key>UNBRICK_PRIVACY_URL</key>
-	<string></string>
+	<string>https://unbrick-api.unbrick.workers.dev/privacy</string>
+	<key>UNBRICK_SUPPORT_URL</key>
+	<string>https://unbrick-api.unbrick.workers.dev/support</string>
 </dict>
 </plist>
