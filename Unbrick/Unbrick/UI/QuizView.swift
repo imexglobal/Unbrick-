@@ -108,7 +108,7 @@ final class QuizModel: ObservableObject {
             f.note = hit == total ? L.s("Every syllable came through clearly.", "Все слоги прозвучали чётко.")
                                   : L.s("Red syllables didn't come through clearly. Play them slowly and repeat.", "Красные слоги прозвучали неясно. Послушайте медленно и повторите.")
             let missed = Grader.missedPron(c, said: said)
-            if let u = c.unit.flatMap(store.lib.unit), !Markup.pronWords(c.text).isEmpty {
+            if let u = store.lib.unit(of: c), !Markup.pronWords(c.text).isEmpty {
                 let words = (missed.isEmpty ? Markup.pronWords(c.text) : missed).map { "\($0.0) → [\($0.1)]" }.joined(separator: " · ")
                 f.tips.append((.pron, L.s("Pronunciation", "Произношение") + " · " + u.pron.rule,
                                words + (missed.isEmpty ? "" : "\n" + Meaning(en: u.pron.en, ru: u.pron.ru).text(L.lang))))
@@ -147,7 +147,7 @@ final class QuizModel: ObservableObject {
         """
         let system = """
         You grade spoken Korean for a learner whose native language is \(lang) and whose goal is \(store.goalText) (KIIP 사회통합프로그램, Korean immigration and naturalization).
-        Judge what they most likely said. Mark correct if it is understandable, natural enough for KIIP level 3-5, and \(c.kind == .open ? "answers the question" : "means the same or is factually right").
+        Judge what they most likely said. Mark correct if it is understandable, natural enough for KIIP level \(store.state.level) (\(Levels.ko(store.state.level))), and \(c.kind == .open ? "answers the question" : "means the same or is factually right").
         Minor particle or ending slips can still be correct, but list them in mistakes. Write feedback, why and grammar in \(lang). fix is a natural corrected Korean sentence (or empty).
         """
         Task { @MainActor in
@@ -267,7 +267,7 @@ struct QuizView: View {
                     Eyebrow(text: L.s("Read it aloud", "Прочитайте вслух"))
                     RichKorean(text: c.text, size: 26)
                     Text(c.meaning.text(store.state.lang)).foregroundStyle(Color.muted)
-                    if let u = c.unit.flatMap(store.lib.unit) {
+                    if let u = store.lib.unit(of: c) {
                         TipBox(kind: .pron, title: L.s("Pronunciation", "Произношение") + " · " + u.pron.rule, bodyText: Meaning(en: u.pron.en, ru: u.pron.ru).text(store.state.lang))
                     }
                 case .line:
@@ -279,22 +279,22 @@ struct QuizView: View {
                         }
                         .padding(14).frame(maxWidth: .infinity, alignment: .leading).glass(18)
                     }
-                    Eyebrow(text: L.s("You are ", "Вы — ") + (c.speaker ?? c.unit.flatMap(store.lib.unit)?.me ?? ""))
+                    Eyebrow(text: L.s("You are ", "Вы — ") + (c.speaker ?? store.lib.unit(of: c)?.me ?? ""))
                     RichKorean(text: c.text, size: 22)
                     Text(c.meaning.text(store.state.lang)).foregroundStyle(Color.muted)
                 case .form:
                     Eyebrow(text: L.s("Make the grammar form and say it", "Образуйте форму и скажите её"))
                     HStack(spacing: 10) {
-                        Text(c.example?.ko ?? "").font(.system(size: 30, weight: .bold))
+                        Text(c.example?.ko ?? "").font(.system(size: 30, weight: .bold)).lineLimit(2).minimumScaleFactor(0.6)
                         Text("+").font(.title).foregroundStyle(Color.muted)
-                        Text(c.gname ?? "").font(.system(size: 26, weight: .heavy)).foregroundStyle(Color.gram)
+                        Text(c.gname ?? "").font(.system(size: 26, weight: .heavy)).foregroundStyle(Color.gram).lineLimit(2).minimumScaleFactor(0.6)
                     }
                     if let g = store.lib.grammarInfo(for: c) {
                         TipBox(kind: .gram, title: g.name, bodyText: Meaning(en: g.en, ru: g.ru).text(store.state.lang))
                     }
                 case .word:
                     Eyebrow(text: L.s("Say the Korean word", "Скажите слово по-корейски"))
-                    Text(c.meaning.text(store.state.lang)).font(.system(size: 30, weight: .bold))
+                    Text(c.meaning.text(store.state.lang)).font(.title.weight(.bold)).lineLimit(4).minimumScaleFactor(0.7)
                 case .gram:
                     Eyebrow(text: L.s("Say the whole sentence with the missing grammar", "Скажите предложение с пропущенной грамматикой"))
                     RichKorean(text: c.text, size: 22, blankGrammar: true)
@@ -303,7 +303,7 @@ struct QuizView: View {
                            bodyText: store.lib.grammarInfo(for: c).map { Meaning(en: $0.en, ru: $0.ru).text(store.state.lang) } ?? "")
                 case .recall:
                     Eyebrow(text: L.s("Say it in Korean", "Скажите по-корейски"))
-                    Text(c.meaning.text(store.state.lang)).font(.system(size: 28, weight: .bold))
+                    Text(c.meaning.text(store.state.lang)).font(.title2.weight(.bold)).lineLimit(4).minimumScaleFactor(0.7)
                 case .fact, .open:
                     Eyebrow(text: c.kind == .open ? L.s("Interview · answer in your own words", "Собеседование · своими словами") : L.s("Answer in Korean", "Ответьте по-корейски"))
                     HStack(alignment: .top) {
@@ -323,7 +323,7 @@ struct QuizView: View {
     func chips(_ c: Card) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                if let u = c.unit.flatMap(store.lib.unit) { Chip(text: L.s("Unit \(u.n)", "Урок \(u.n)") + " · " + u.ko) }
+                if let u = store.lib.unit(of: c) { Chip(text: "L\(u.lv) · " + L.s("Unit \(u.n)", "Урок \(u.n)") + " · " + u.ko) }
                 Chip(text: c.kind.label, color: c.kind == .pron ? .pron : (c.kind == .gram || c.kind == .form) ? .gram : .info)
                 if c.kind == .line { Chip(text: c.scene == 0 ? L.s("말하기 dialogue", "Диалог 말하기") : L.s("듣기 conversation", "Разговор 듣기"), color: .accent) }
                 if let g = c.gname { Chip(text: g, color: .gram) }

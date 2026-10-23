@@ -10,12 +10,19 @@ struct LearnView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         Text(L.s("Learn", "Учёба")).font(.largeTitle.weight(.heavy)).padding(.top, 8)
-                        Text(L.s("KIIP 3 · 중급 1 — every word, grammar point, dialogue and reading from your textbook and workbook.",
-                                 "KIIP 3 · 중급 1 — вся лексика, грамматика, диалоги и тексты из учебника и рабочей тетради."))
-                            .font(.subheadline).foregroundStyle(Color.muted)
-                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                            ForEach(store.lib.units) { u in
-                                NavigationLink(value: u.n) { unitTile(u) }.buttonStyle(.plain)
+                        levelPicker
+                        if store.levelUnits.isEmpty {
+                            Text(L.s("No lessons are bundled for this level yet.", "Для этого уровня уроки ещё не добавлены."))
+                                .font(.subheadline).foregroundStyle(Color.muted)
+                                .padding(16).frame(maxWidth: .infinity, alignment: .leading).glass()
+                        } else {
+                            Text(L.s("\(Levels.ko(store.state.level)) · lessons, words, grammar, dialogues and quizzes for this level.",
+                                     "\(Levels.ko(store.state.level)) · уроки, слова, грамматика, диалоги и тесты этого уровня."))
+                                .font(.subheadline).foregroundStyle(Color.muted)
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                                ForEach(store.levelUnits) { u in
+                                    NavigationLink(value: UnitKey(level: u.lv, n: u.n)) { unitTile(u) }.buttonStyle(.plain)
+                                }
                             }
                         }
                         Text(L.s("Other decks", "Другие наборы")).font(.title3.bold()).padding(.top, 6)
@@ -27,13 +34,38 @@ struct LearnView: View {
                 }
                 .scrollIndicators(.hidden)
             }
-            .navigationDestination(for: Int.self) { UnitDetailView(n: $0) }
+            .navigationDestination(for: UnitKey.self) { UnitDetailView(key: $0) }
             .toolbar(.hidden, for: .navigationBar)
         }
     }
 
+    var levelPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Levels.all, id: \.self) { lv in
+                    let on = lv == store.state.level
+                    Button { store.setLevel(lv) } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(Levels.ko(lv)).font(.subheadline.weight(.bold))
+                            Text(Levels.gloss(lv, store.state.lang)).font(.caption2)
+                        }
+                        .foregroundStyle(Color.ink)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(on ? AnyShapeStyle(Color.accent.opacity(0.35)) : AnyShapeStyle(Color.white.opacity(0.08)), in: RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(on ? Color.accent : Color.hair, lineWidth: 1.5))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Levels.line(lv, store.state.lang))
+                    .accessibilityAddTraits(on ? AccessibilityTraits.isSelected : AccessibilityTraits())
+                }
+            }
+        }
+    }
+
     func unitTile(_ u: UnitData) -> some View {
-        let p = store.unitPct(u.n), current = u.n == store.state.unit
+        let own = store.lib.cards(in: u.lv, u.n)
+        let p = own.isEmpty ? 0 : Double(own.filter(store.mastered).count) / Double(own.count)
+        let current = u.n == store.state.unit && u.lv == store.state.level
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(L.s("Unit \(u.n)", "Урок \(u.n)")).font(.caption.monospaced()).foregroundStyle(Color.muted)
@@ -41,13 +73,15 @@ struct LearnView: View {
                 if current { Chip(text: L.s("Now", "Сейчас"), color: .accent) }
                 else if p >= Store.goal { Image(systemName: "checkmark.seal.fill").foregroundStyle(Color.good) }
             }
-            Text(u.ko).font(.headline).foregroundStyle(Color.ink)
-            Text(u.title.text(store.state.lang)).font(.caption).foregroundStyle(Color.muted).lineLimit(1)
+            Text(u.ko).font(.headline).foregroundStyle(Color.ink).lineLimit(3).minimumScaleFactor(0.8)
+            Text(u.title.text(store.state.lang)).font(.caption).foregroundStyle(Color.muted).lineLimit(3)
             ProgressView(value: p).tint(p >= Store.goal ? .good : .info)
-            Text("\(Int(p * 100))% · \(store.lib.cards(inUnit: u.n).count) " + L.s("cards", "карт.")).font(.caption2.monospaced()).foregroundStyle(Color.muted)
+            Text("\(Int(p * 100))% · \(own.count) " + L.s("cards", "карт.")).font(.caption2.monospaced()).foregroundStyle(Color.muted)
         }
         .padding(14).frame(maxWidth: .infinity, alignment: .leading).glass(20)
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(current ? Color.accent : .clear, lineWidth: 1.5))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(L.s("Unit \(u.n), \(u.ko), \(Int(p * 100)) percent", "Урок \(u.n), \(u.ko), \(Int(p * 100)) процентов"))
     }
 
     func deckRow(_ title: String, _ icon: String, _ cards: [Card]) -> some View {
@@ -65,6 +99,9 @@ struct LearnView: View {
             }
             .font(.subheadline.weight(.semibold))
             .disabled(cards.isEmpty)
+            if cards.isEmpty {
+                Text(L.s("Nothing in this deck yet.", "В этом наборе пока пусто.")).font(.caption).foregroundStyle(Color.muted)
+            }
         }
         .padding(16).glass()
     }
@@ -73,11 +110,12 @@ struct LearnView: View {
 struct UnitDetailView: View {
     @EnvironmentObject var store: Store
     @Environment(\.dismiss) var dismiss
-    let n: Int
+    let key: UnitKey
     @State private var filter: Kind? = nil
 
-    var unit: UnitData? { store.lib.unit(n) }
-    var cards: [Card] { store.lib.cards(inUnit: n) }
+    var n: Int { key.n }
+    var unit: UnitData? { store.lib.unit(key.level, key.n) }
+    var cards: [Card] { store.lib.cards(in: key.level, key.n) }
     var shown: [Card] { filter.map { f in cards.filter { $0.kind == f } } ?? cards }
 
     var body: some View {
@@ -87,6 +125,7 @@ struct UnitDetailView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 12) {
                         Button { dismiss() } label: { Image(systemName: "chevron.left").font(.title3.weight(.semibold)).foregroundStyle(Color.ink).frame(width: 40, height: 40).background(Color.white.opacity(0.09), in: Circle()) }
+                            .accessibilityLabel(L.s("Back", "Назад"))
                         HomeButton()
                         Spacer()
                     }
@@ -101,11 +140,11 @@ struct UnitDetailView: View {
     }
 
     func header(_ u: UnitData) -> some View {
-        let p = store.unitPct(n)
+        let p = cards.isEmpty ? 0 : Double(cards.filter(store.mastered).count) / Double(cards.count)
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Eyebrow(text: L.s("Unit \(n)", "Урок \(n)"))
+                    Eyebrow(text: "L\(key.level) · " + L.s("Unit \(n)", "Урок \(n)"))
                     Text(u.ko).font(.largeTitle.weight(.heavy))
                     Text(u.title.text(store.state.lang)).foregroundStyle(Color.muted)
                 }
@@ -120,11 +159,15 @@ struct UnitDetailView: View {
                 stat(tried > 0 ? "\(ok * 100 / tried)%" : "—", L.s("Accuracy", "Точность"))
             }
             HStack(spacing: 8) {
-                Button(L.s("Practice this unit", "Тренировать урок")) { store.practice(unit: n) }.buttonStyle(PrimaryButton())
-                Button(L.s("Role-play", "Диалог")) { store.state.unit = n; store.launch = .quiz(.role(n)) }.buttonStyle(GlassButton())
+                Button(L.s("Practice this unit", "Тренировать урок")) { store.setLevel(key.level); store.practice(unit: n) }.buttonStyle(PrimaryButton())
+                Button(L.s("Role-play", "Диалог")) { store.setLevel(key.level); store.launch = .quiz(.role(n)) }.buttonStyle(GlassButton())
             }
             if n != store.state.unit {
-                Button(L.s("Make this my current unit", "Сделать текущим уроком")) { store.state.unit = n; store.flash(L.s("Unit \(n) is now your current unit.", "Урок \(n) — текущий.")) }
+                Button(L.s("Make this my current unit", "Сделать текущим уроком")) {
+                    store.setLevel(key.level)
+                    store.state.unit = n
+                    store.flash(L.s("Unit \(n) is now your current unit.", "Урок \(n) — текущий."))
+                }
                     .font(.subheadline.weight(.semibold))
             }
         }
@@ -144,7 +187,7 @@ struct UnitDetailView: View {
             Spacer()
             Text(L.s("80% each to finish the unit", "по 80% для завершения")).font(.caption).foregroundStyle(Color.muted)
         }
-        ForEach(u.grammar, id: \.name) { g in GrammarLesson(grammar: g, unit: n) }
+        ForEach(u.grammar, id: \.name) { g in GrammarLesson(grammar: g, unit: n, level: key.level) }
         vocabPanel
         Text(L.s("Pronunciation", "Произношение")).font(.title3.bold())
         TipBox(kind: .pron, title: u.pron.rule, bodyText: Meaning(en: u.pron.en, ru: u.pron.ru).text(store.state.lang))
@@ -205,6 +248,9 @@ struct UnitDetailView: View {
                 store.launch = .practice(UUID(), Array(pick))
             }
             .buttonStyle(GlassButton()).disabled(words.isEmpty)
+            if words.isEmpty {
+                Text(L.s("No vocabulary cards in this unit.", "В этом уроке нет карточек со словами.")).font(.caption).foregroundStyle(Color.muted)
+            }
         }
         .padding(16).glass()
     }
@@ -263,11 +309,12 @@ struct GrammarLesson: View {
     @EnvironmentObject var store: Store
     let grammar: GrammarPoint
     let unit: Int
+    let level: Int
     @State private var open = false
 
     var body: some View {
-        let cards = store.lib.cards(for: grammar, inUnit: unit)
-        let p = store.grammarPct(grammar, unit: unit)
+        let cards = store.lib.cards(for: grammar, in: level, unit)
+        let p = cards.isEmpty ? 1.0 : Double(cards.filter(store.mastered).count) / Double(cards.count)
         let lang = store.state.lang
         VStack(alignment: .leading, spacing: 10) {
             Button { withAnimation { open.toggle() } } label: {
@@ -330,6 +377,9 @@ struct GrammarLesson: View {
                 store.launch = .practice(UUID(), Array(pick))
             }
             .buttonStyle(GlassButton()).disabled(cards.isEmpty)
+            if cards.isEmpty {
+                Text(L.s("No drill cards for this grammar yet.", "Для этой грамматики пока нет карточек.")).font(.caption).foregroundStyle(Color.muted)
+            }
         }
         .padding(16).glass()
     }

@@ -102,7 +102,7 @@ struct RootView: View {
                         .tabItem { Label(L.s("Profile", "Профиль"), systemImage: "person.crop.circle.fill") }
                 }
             } else {
-                SetupView(isEdit: false)
+                OnboardingView()
             }
             if let t = store.toast {
                 Text(t).font(.subheadline.weight(.semibold)).multilineTextAlignment(.center)
@@ -113,6 +113,7 @@ struct RootView: View {
             }
         }
         .animation(.spring, value: store.toast)
+        .dynamicTypeSize(.xSmall ... .accessibility3)
         .fullScreenCover(item: $store.launch) { s in SheetContent(sheet: s) }
         .fullScreenCover(item: Binding(get: { store.shieldApp.map { ShieldApp(name: $0) } }, set: { store.shieldApp = $0?.name })) { s in
             ShieldFlow(app: s.name)

@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - Bundled content (exported from the KIIP 중급 1 textbook + workbook)
+// MARK: - Bundled lessons for KIIP levels 0–5. Level 3 keeps the original 중급 1 cards.
 
 struct ContentFile: Decodable {
     let units: [UnitData]
@@ -9,8 +9,16 @@ struct ContentFile: Decodable {
     let visa: [PhraseData]
 }
 
+struct UnitKey: Hashable {
+    var level: Int
+    var n: Int
+}
+
 struct UnitData: Decodable, Identifiable {
     let n: Int
+    /// Missing on older files means the original 중급 1 book.
+    var level: Int? = nil
+    var lv: Int { level ?? 3 }
     let ko: String
     let en: String
     let ru: String
@@ -23,7 +31,7 @@ struct UnitData: Decodable, Identifiable {
     let questions: [Question]
     var listening: [Line]? = nil       // the unit's 듣기 conversation (from the textbook's listening scripts)
     var listeningTitle: String? = nil
-    var id: Int { n }
+    var id: String { "\(lv)-\(n)" }
     var title: Meaning { Meaning(en: en, ru: ru) }
 }
 
@@ -86,6 +94,7 @@ struct Card: Identifiable, Hashable {
     var gname: String? = nil
     var speaker: String? = nil       // who says this line in a dialogue
     var scene = 0                    // 0 = 말하기 dialogue, 1 = 듣기 conversation
+    var level = 3
     var isMine = false
 
     var plain: String { Markup.plain(text) }
@@ -108,7 +117,7 @@ final class Library {
     let visa: [Card]
     /// Set when the bundled lessons could not be read, so the UI can say so instead of looking empty.
     let loadError: String?
-    private var byUnit: [Int: [Card]] = [:]
+    private var byUnit: [String: [Card]] = [:]
 
     private init() {
         let decoded: ContentFile?
@@ -137,13 +146,17 @@ final class Library {
         units = file.units
         var cards: [Card] = []
         for u in file.units {
+            let lv = u.lv
+            func cid(_ prefix: String, _ i: Int) -> String {
+                lv == 3 ? "\(prefix)\(u.n)-\(i)" : "L\(lv)-\(prefix)\(u.n)-\(i)"
+            }
             for (i, s) in u.pron.sentences.enumerated() {
-                cards.append(Card(id: "p\(u.n)-\(i)", kind: .pron, unit: u.n, text: s.ko, meaning: Meaning(en: s.en, ru: s.ru)))
+                cards.append(Card(id: cid("p", i), kind: .pron, unit: u.n, text: s.ko, meaning: Meaning(en: s.en, ru: s.ru), level: lv))
             }
             // Every line of both conversations is a speaking card, whoever says it.
             for (scene, lines, prefix) in [(0, u.dialogue, "d"), (1, u.listening ?? [], "l")] {
                 for (i, d) in lines.enumerated() where !d.ko.isEmpty {
-                    var c = Card(id: "\(prefix)\(u.n)-\(i)", kind: .line, unit: u.n, text: d.ko, meaning: Meaning(en: d.en, ru: d.ru))
+                    var c = Card(id: cid(prefix, i), kind: .line, unit: u.n, text: d.ko, meaning: Meaning(en: d.en, ru: d.ru), level: lv)
                     if i > 0 { let p = lines[i - 1]; c.prev = (p.speaker, p.ko, Meaning(en: p.en, ru: p.ru)) }
                     c.speaker = d.speaker
                     c.scene = scene
@@ -151,42 +164,50 @@ final class Library {
                 }
             }
             for (i, v) in u.vocab.enumerated() where !v.ko.isEmpty {
-                var c = Card(id: "w\(u.n)-\(i)", kind: .word, unit: u.n, text: v.ko, meaning: Meaning(en: v.en, ru: v.ru))
+                var c = Card(id: cid("w", i), kind: .word, unit: u.n, text: v.ko, meaning: Meaning(en: v.en, ru: v.ru), level: lv)
                 if let ex = v.ex, !ex.isEmpty { c.example = Tri(ko: ex, en: v.exen ?? "", ru: v.exru ?? "") }
                 cards.append(c)
             }
             for (i, g) in u.sentences.enumerated() where g.ko.contains("[[") {
-                var c = Card(id: "g\(u.n)-\(i)", kind: .gram, unit: u.n, text: g.ko, meaning: Meaning(en: g.en, ru: g.ru))
+                var c = Card(id: cid("g", i), kind: .gram, unit: u.n, text: g.ko, meaning: Meaning(en: g.en, ru: g.ru), level: lv)
                 c.gname = g.g
                 cards.append(c)
             }
             for g in u.grammar {
                 for (i, f) in (g.forms ?? []).enumerated() where !f.base.isEmpty && !f.form.isEmpty {
-                    var c = Card(id: "f\(u.n)-\(Grader.normalized(g.name).prefix(12))-\(i)", kind: .form, unit: u.n, text: f.form,
-                                 meaning: Meaning(en: "\(f.base) + \(g.name)", ru: "\(f.base) + \(g.name)"))
+                    let stem = String(Grader.normalized(g.name).prefix(12))
+                    let formID = lv == 3 ? "f\(u.n)-\(stem)-\(i)" : "L\(lv)-f\(u.n)-\(stem)-\(i)"
+                    var c = Card(id: formID, kind: .form, unit: u.n, text: f.form,
+                                 meaning: Meaning(en: "\(f.base) + \(g.name)", ru: "\(f.base) + \(g.name)"), level: lv)
                     c.gname = g.name
                     c.example = Tri(ko: f.base, en: g.name, ru: g.name)
                     cards.append(c)
                 }
             }
             for (i, q) in u.questions.enumerated() where !q.q.isEmpty {
-                cards.append(Card(id: "c\(u.n)-\(i)", kind: .fact, unit: u.n, text: q.t, meaning: Meaning(en: q.en, ru: q.ru),
-                                  question: q.q, qMeaning: Meaning(en: q.qen, ru: q.qru), keys: q.k ?? []))
+                cards.append(Card(id: cid("c", i), kind: .fact, unit: u.n, text: q.t, meaning: Meaning(en: q.en, ru: q.ru),
+                                  question: q.q, qMeaning: Meaning(en: q.qen, ru: q.qru), keys: q.k ?? [], level: lv))
             }
         }
         book = cards
         society = file.society.map { Card(id: $0.id, kind: .fact, text: $0.t, meaning: Meaning(en: $0.en, ru: $0.ru), question: $0.q, qMeaning: Meaning(en: $0.qen, ru: $0.qru), keys: $0.k) }
         interview = file.interview.map { Card(id: $0.id, kind: .open, text: $0.t, meaning: Meaning(en: $0.en, ru: $0.ru), question: $0.q, qMeaning: Meaning(en: $0.qen, ru: $0.qru)) }
         visa = file.visa.map { Card(id: $0.id, kind: .recall, text: $0.ko, meaning: Meaning(en: $0.en, ru: $0.ru)) }
-        byUnit = Dictionary(grouping: book, by: { $0.unit ?? 0 })
+        byUnit = Dictionary(grouping: book, by: { "\($0.level)-\($0.unit ?? 0)" })
     }
 
-    func unit(_ n: Int) -> UnitData? { units.first { $0.n == n } }
-    func cards(inUnit n: Int) -> [Card] { byUnit[n] ?? [] }
+    func units(for level: Int) -> [UnitData] { units.filter { $0.lv == level }.sorted { $0.n < $1.n } }
+    func unit(_ level: Int, _ n: Int) -> UnitData? { units.first { $0.lv == level && $0.n == n } }
+    func unit(of card: Card) -> UnitData? {
+        guard let n = card.unit else { return nil }
+        return unit(card.level, n)
+    }
+    func cards(in level: Int, _ n: Int) -> [Card] { byUnit["\(level)-\(n)"] ?? [] }
+    func cards(forLevel level: Int) -> [Card] { book.filter { $0.level == level } }
 
     /// The unit grammar point a sentence card practises, for its explanation.
     func grammarInfo(for c: Card) -> GrammarPoint? {
-        guard let g = c.gname, let u = c.unit.flatMap(unit) else { return nil }
+        guard let g = c.gname, let n = c.unit, let u = unit(c.level, n) else { return nil }
         return u.grammar.first { Library.sameGrammar($0.name, g) }
     }
 
@@ -201,8 +222,8 @@ final class Library {
     }
 
     /// Every sentence and form card that practises one grammar point.
-    func cards(for g: GrammarPoint, inUnit n: Int) -> [Card] {
-        cards(inUnit: n).filter { ($0.kind == .gram || $0.kind == .form) && $0.gname.map { Library.sameGrammar(g.name, $0) } == true }
+    func cards(for g: GrammarPoint, in level: Int, _ n: Int) -> [Card] {
+        cards(in: level, n).filter { ($0.kind == .gram || $0.kind == .form) && $0.gname.map { Library.sameGrammar(g.name, $0) } == true }
     }
 }
 

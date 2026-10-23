@@ -212,6 +212,7 @@ struct PlayButtons: View {
 struct IconButton: View {
     var system: String
     var size: CGFloat = 46
+    var label: String? = nil
     var action: () -> Void
     var body: some View {
         Button(action: action) {
@@ -221,6 +222,18 @@ struct IconButton: View {
                 .overlay(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).strokeBorder(Color.hair))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label ?? IconButton.spoken(system))
+    }
+
+    static func spoken(_ system: String) -> String {
+        switch system {
+        case "speaker.wave.2.fill": return L.s("Play", "Слушать")
+        case "tortoise.fill": return L.s("Play slowly", "Медленно")
+        case "xmark": return L.s("Close", "Закрыть")
+        case "chevron.left": return L.s("Back", "Назад")
+        case "chevron.right": return L.s("Next", "Дальше")
+        default: return system
+        }
     }
 }
 
