@@ -1,0 +1,39 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+DerivedData/
+build/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+.swiftpm/
+timeline.xctimeline
+playground.xcworkspace
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+.dev.vars
+*.pem
+*.p12
+*.mobileprovision
+
+# Android / Gradle
+android/.gradle/
+android/local.properties
+android/**/build/
+android/.idea/
+*.iml
+captures/
+
+# Node
+node_modules/
