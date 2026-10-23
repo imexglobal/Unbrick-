@@ -5,7 +5,11 @@ struct ReviewView: View {
     @Environment(\.dismiss) var dismiss
     @State private var tab = 0          // 0 all, 1 learned, 2 needs work
     @State private var open: String?
-    @State private var practice: [Card]?
+    @State private var practice: PracticeLaunch?
+
+    /// Stable identity for the practice cover. Rebuilding this inside a Binding getter
+    /// minted a new UUID every refresh and dismissed the session immediately.
+    struct PracticeLaunch: Identifiable { let id = UUID(); let cards: [Card] }
 
     struct Group: Identifiable { let id: String; let title: String; let sub: String; let items: [Card] }
 
@@ -46,12 +50,10 @@ struct ReviewView: View {
             .scrollIndicators(.hidden)
         }
         .onAppear { if open == nil { open = "u\(store.state.unit)" } }
-        .fullScreenCover(item: Binding(get: { practice.map { PracticeSet(cards: $0) } }, set: { practice = $0?.cards })) { p in
+        .fullScreenCover(item: $practice) { p in
             QuizView(model: QuizModel(mode: .practice, cards: p.cards))
         }
     }
-
-    struct PracticeSet: Identifiable { let id = UUID(); let cards: [Card] }
 
     var stats: some View {
         let items = store.allItems, st = items.map { store.srs($0.id) }
@@ -123,7 +125,7 @@ struct ReviewView: View {
                         ForEach(vis) { c in item(c) }
                         if !vis.isEmpty {
                             Button(L.s("Practice \(min(vis.count, 10))", "Тренировать \(min(vis.count, 10))")) {
-                                practice = Array(vis.sorted { store.srs($0.id).box < store.srs($1.id).box }.prefix(10))
+                                practice = PracticeLaunch(cards: Array(vis.sorted { store.srs($0.id).box < store.srs($1.id).box }.prefix(10)))
                             }
                             .buttonStyle(PrimaryButton()).padding(.vertical, 12)
                         }
@@ -154,7 +156,7 @@ struct ReviewView: View {
                 if s.n > 0 { Text("\(s.ok)/\(s.n)" + (s.best.map { " · best \($0)%" } ?? "")).font(.caption2.monospaced()).foregroundStyle(Color.muted) }
                 Spacer()
                 IconButton(system: "speaker.wave.2.fill", size: 34) { Speaker.shared.say(c.question ?? c.plain) }
-                Button(L.s("Practice", "Тренировать")) { practice = [c] }.font(.caption.weight(.semibold))
+                Button(L.s("Practice", "Тренировать")) { practice = PracticeLaunch(cards: [c]) }.font(.caption.weight(.semibold))
             }
         }
         .padding(.vertical, 6)

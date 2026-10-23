@@ -35,6 +35,13 @@ final class Speaker: NSObject, ObservableObject {
     func stop() { synth.stopSpeaking(at: .immediate) }
 }
 
+enum RecognizerError: LocalizedError {
+    case noInput
+    var errorDescription: String? {
+        L.s("The microphone isn't ready. Try again.", "Микрофон не готов. Попробуйте ещё раз.")
+    }
+}
+
 /// Live Korean speech recognition that also records the learner's voice for playback.
 final class Recognizer: ObservableObject {
     static let shared = Recognizer()
@@ -52,6 +59,9 @@ final class Recognizer: ObservableObject {
     private var file: AVAudioFile?
     private var onFinish: (([String]) -> Void)?
     private var finished = false
+    private var tapInstalled = false
+    /// Bumped on every start/cancel so a late result from the previous take can't finish the next one.
+    private var generation = 0
     private var player: AVAudioPlayer?
 
     var available: Bool { recognizer?.isAvailable ?? false }
@@ -64,6 +74,8 @@ final class Recognizer: ObservableObject {
     }
 
     func start(onFinish: @escaping ([String]) -> Void) throws {
+        generation += 1
+        let gen = generation
         stopEngine()
         self.onFinish = onFinish
         finished = false
@@ -76,24 +88,38 @@ final class Recognizer: ObservableObject {
         let req = SFSpeechAudioBufferRecognitionRequest()
         req.shouldReportPartialResults = true
         req.taskHint = .dictation
+        if recognizer?.supportsOnDeviceRecognition == true {
+            req.requiresOnDeviceRecognition = true
+        }
         request = req
 
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            onFinish = nil
+            throw RecognizerError.noInput
+        }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("clip-\(UUID().uuidString).caf")
         file = try? AVAudioFile(forWriting: url, settings: format.settings)
         lastClip = url
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.request?.append(buffer)
-            try? self?.file?.write(from: buffer)
+            guard let self, self.generation == gen else { return }
+            self.request?.append(buffer)
+            try? self.file?.write(from: buffer)
         }
+        tapInstalled = true
         engine.prepare()
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            stopEngine()
+            throw error
+        }
         isRecording = true
 
         task = recognizer?.recognitionTask(with: req) { [weak self] result, error in
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self, self.generation == gen else { return }
                 if let r = result {
                     self.transcript = r.bestTranscription.formattedString
                     self.alternatives = [r.bestTranscription.formattedString] + r.transcriptions.map(\.formattedString)
@@ -107,20 +133,31 @@ final class Recognizer: ObservableObject {
     /// Stop listening; the final result arrives shortly after, or the current one is used.
     func stop() {
         guard isRecording else { return }
+        let gen = generation
         stopEngine()
         request?.endAudio()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.finish() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, self.generation == gen else { return }
+            self.finish()
+        }
     }
 
     func cancel() {
+        generation += 1
+        finished = true
         onFinish = nil
         task?.cancel()
+        task = nil
         stopEngine()
     }
 
+    /// `removeTap` crashes if no tap is installed, so the flag is the guard.
     private func stopEngine() {
         if engine.isRunning { engine.stop() }
-        engine.inputNode.removeTap(onBus: 0)
+        if tapInstalled {
+            engine.inputNode.removeTap(onBus: 0)
+            tapInstalled = false
+        }
         file = nil
         isRecording = false
     }

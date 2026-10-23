@@ -135,9 +135,13 @@ final class Store: ObservableObject {
     @Published var tab: Tab = .home
     @Published var launch: Sheet?          // full-screen session or page opened from any tab
 
+    /// Gregorian `yyyy-MM-dd` in the device time zone, with ASCII digits.
+    /// A locale-sensitive DateFormatter can write a different key than the streak uses.
     static func dayKey(_ d: Date = Date()) -> String {
-        let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: d)
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = .current
+        let p = cal.dateComponents([.year, .month, .day], from: d)
+        return String(format: "%04d-%02d-%02d", p.year ?? 0, p.month ?? 0, p.day ?? 0)
     }
 
     /// Start a card session in a specific unit, so every card comes from that unit.
@@ -181,9 +185,9 @@ final class Store: ObservableObject {
 
     func grantUnlock() {
         state.until = Date().addingTimeInterval(TimeInterval(state.intensity.minutes * 60)).timeIntervalSince1970
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
-        let today = f.string(from: Date()), yesterday = f.string(from: Date().addingTimeInterval(-86400))
-        if state.lastDay != today { state.streak = state.lastDay == yesterday ? state.streak + 1 : 1; state.lastDay = today }
+        let today = Self.dayKey()
+        let prior = Calendar(identifier: .gregorian).date(byAdding: .day, value: -1, to: Date()).map(Self.dayKey) ?? ""
+        if state.lastDay != today { state.streak = state.lastDay == prior ? state.streak + 1 : 1; state.lastDay = today }
         state.activity[Self.dayKey(), default: DayLog()].unlocks += 1
         scheduleRelockNotice()
     }

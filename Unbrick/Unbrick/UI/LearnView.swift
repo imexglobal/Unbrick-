@@ -64,6 +64,7 @@ struct LearnView: View {
                 store.launch = .practice(UUID(), Array(pick))
             }
             .font(.subheadline.weight(.semibold))
+            .disabled(cards.isEmpty)
         }
         .padding(16).glass()
     }

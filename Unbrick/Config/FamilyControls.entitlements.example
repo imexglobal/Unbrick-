@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Do not add this file to the target until Apple has approved Family Controls
+  for the distribution profile. Signing fails with "provisioning profile
+  doesn't include the Family Controls capability" until then.
+
+  After approval:
+  1. Copy this file to Unbrick/Unbrick.entitlements (drop the .example name).
+  2. In both the Debug and Release target configs in project.pbxproj, set
+     CODE_SIGN_ENTITLEMENTS = Unbrick/Unbrick.entitlements;
+  3. Request authorization with AuthorizationCenter for .individual and apply
+     shields with ManagedSettings. A Device Activity Monitor extension is what
+     re-applies the shield when the app is not running. See LAUNCH.md.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.family-controls</key>
+	<true/>
+</dict>
+</plist>

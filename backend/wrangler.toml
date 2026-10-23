@@ -1,0 +1,13 @@
+name = "unbrick-api"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+ANTHROPIC_MODEL = "claude-opus-5-5"
+ANTHROPIC_VERSION = "2023-06-01"
+MAX_TOKENS = "4096"
+RATE_LIMIT_PER_MINUTE = "12"
+# Leave ANTHROPIC_BETA unset unless you still want a beta header.
+# APP_TOKEN and ANTHROPIC_API_KEY are secrets. Do not put them here.
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler secret put APP_TOKEN

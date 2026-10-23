@@ -5,6 +5,10 @@ import AppIntents
 struct UnbrickApp: App {
     @StateObject private var store = Store.shared
 
+    init() {
+        LegacyKeychainCleanup.removeEmbeddedAnthropicKey()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -79,6 +83,13 @@ struct RootView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
+            if let err = store.lib.loadError {
+                Text(L.s("Lessons didn't load. \(err)", "Уроки не загрузились. \(err)"))
+                    .font(.footnote).foregroundStyle(Color.bad)
+                    .padding(12).frame(maxWidth: .infinity, alignment: .leading).glass(16)
+                    .padding(.horizontal, 16).padding(.top, 8)
+                    .zIndex(9)
+            }
             if store.state.setupDone {
                 TabView(selection: $store.tab) {
                     HomeView().tag(Tab.home)

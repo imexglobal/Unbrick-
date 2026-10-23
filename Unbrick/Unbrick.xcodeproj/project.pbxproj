@@ -177,8 +177,6 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Unbrick;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Unbrick listens while you speak Korean so it can check your pronunciation and answers.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Unbrick turns your spoken Korean into text to check your pronunciation and answers.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -208,8 +206,6 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Unbrick;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Unbrick listens while you speak Korean so it can check your pronunciation and answers.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Unbrick turns your spoken Korean into text to check your pronunciation and answers.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;

@@ -45,11 +45,12 @@ final class QuizModel: ObservableObject {
         if mode == .review { return min(it.pass, max(1, cards.count - 1)) }
         return it.pass
     }
-    var passed: Bool { right >= need }
+    var passed: Bool { !cards.isEmpty && right >= need }
 
     func prepare() {
         feedback = nil; selfCheck = false; picked = nil; checking = false
-        guard !done else { return }
+        Recognizer.shared.cancel()
+        guard !done, !cards.isEmpty else { return }
         let c = card
         if c.kind == .listen {
             let pool = store.pool().filter { $0.question == nil && $0.id != c.id }.shuffled().prefix(3).map { $0.meaning.text(L.lang) }
@@ -178,7 +179,7 @@ final class QuizModel: ObservableObject {
     }
 
     func finish(ok rawOk: Bool, pct: Int?) {
-        guard !done else { return }
+        guard !done, !cards.isEmpty else { return }
         let ok = rawOk && !selfCheck        // peeking at the answer counts as a miss, so the card returns sooner
         results[index] = ok
         let notes = store.record(card, ok: ok, pct: pct, practice: mode == .practice)
@@ -207,6 +208,9 @@ struct QuizView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             AuroraBackground()
+            if model.cards.isEmpty {
+                emptySession
+            } else {
             VStack(spacing: 16) {
                 topBar
                 if model.done { resultView } else {
@@ -214,13 +218,25 @@ struct QuizView: View {
                 }
             }
             .padding(.horizontal, 16)
-            if !model.done {
+            }
+            if !model.cards.isEmpty && !model.done {
                 if let f = model.feedback { FeedbackSheet(feedback: f, onNext: model.next, onRetry: model.retry).transition(.move(edge: .bottom)) }
                 else if model.card.kind != .listen && !model.selfCheck { footer }
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: model.feedback != nil)
         .onDisappear { rec.cancel(); Speaker.shared.stop() }
+    }
+
+    var emptySession: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Text(L.s("Nothing to practice", "Нечего тренировать")).font(.title.bold())
+            Text(L.s("This set has no cards yet.", "В этом наборе пока нет карточек.")).multilineTextAlignment(.center).foregroundStyle(Color.muted)
+            Spacer()
+            Button(L.s("Back to home", "На главную")) { store.goHome(); dismiss() }.buttonStyle(PrimaryButton()).padding(.bottom, 12)
+        }
+        .padding(.horizontal, 8)
     }
 
     var topBar: some View {
@@ -362,7 +378,7 @@ struct QuizView: View {
                 Image(systemName: "speaker.wave.3.fill").font(.system(size: 36)).foregroundStyle(.white)
                     .frame(width: 104, height: 104).background(Circle().fill(brandGradient))
             }
-            ForEach(model.options, id: \.self) { o in
+            ForEach(Array(model.options.enumerated()), id: \.offset) { _, o in
                 let right = o == c.meaning.text(store.state.lang)
                 Button { model.choose(o) } label: {
                     Text(o).font(.body.weight(.semibold)).multilineTextAlignment(.leading)

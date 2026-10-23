@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 extension Color {
     init(hex: String) {
@@ -83,7 +84,7 @@ extension Color {
     func mix(with other: Color, by t: Double) -> Color {
         let a = UIColor(self), b = UIColor(other)
         var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0, r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
-        a.getRed(&r1, green: &g1, blue: &b1, alpha: &a1); b.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        guard a.getRed(&r1, green: &g1, blue: &b1, alpha: &a1), b.getRed(&r2, green: &g2, blue: &b2, alpha: &a2) else { return self }
         return Color(red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t, blue: b1 + (b2 - b1) * t)
     }
 }

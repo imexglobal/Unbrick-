@@ -33,109 +33,99 @@ enum ScreenTimeCode {
     }
 }
 
-/// The learner's own Anthropic API key, kept in the iOS keychain.
-enum APIKey {
-    private static let service = "com.imexglobalintl.unbrick.anthropic"
-
-    static var value: String? {
-        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-                                kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
-        var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
-        let s = String(data: d, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (s?.isEmpty ?? true) ? nil : s
+/// Where this build sends tutor and grading requests. The Anthropic key lives only on that server.
+enum ProxyConfig {
+    static var baseURL: URL? {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "UNBRICK_API_BASE") as? String else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(), let host = url.host, !host.isEmpty else { return nil }
+        if scheme == "https" { return url }
+        #if DEBUG
+        if scheme == "http", host == "localhost" || host == "127.0.0.1" { return url }
+        #endif
+        return nil
     }
 
-    static func set(_ key: String?) {
-        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
+    /// Shared with the proxy. It is not the Anthropic key; it only raises the cost of casual abuse.
+    static var appToken: String? {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "UNBRICK_APP_TOKEN") as? String else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    static var privacyURL: URL? {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "UNBRICK_PRIVACY_URL") as? String else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), url.scheme?.lowercased() == "https" else { return nil }
+        return url
+    }
+
+    static var isConfigured: Bool { baseURL != nil && appToken != nil }
+}
+
+/// Older builds let a learner paste an Anthropic key into the Keychain and called the API from the phone.
+enum LegacyKeychainCleanup {
+    static func removeEmbeddedAnthropicKey() {
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.imexglobalintl.unbrick.anthropic"
+        ]
         SecItemDelete(base as CFDictionary)
-        guard let key, !key.isEmpty else { return }
-        var add = base
-        add[kSecValueData as String] = Data(key.utf8)
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(add as CFDictionary, nil)
     }
-
-    static var isSet: Bool { value != nil }
 }
 
 enum ClaudeError: LocalizedError {
-    case noKey, badKey, rateLimited, refused, server(Int, String), badReply
+    case notConfigured, rateLimited, refused, offline, server(Int, String), badReply
     var errorDescription: String? {
         switch self {
-        case .noKey: return L.s("Add your Anthropic API key in Settings to use AI checking and the tutor.", "Добавьте ключ Anthropic API в настройках, чтобы пользоваться ИИ.")
-        case .badKey: return L.s("Your API key was rejected. Check it in Settings.", "Ключ API отклонён. Проверьте его в настройках.")
+        case .notConfigured:
+            return L.s("Claude isn't available on this build yet. Turn on Apple Intelligence for on-device checking, or ship the app with the Unbrick server URL.",
+                       "Claude в этой сборке ещё не подключён. Включите Apple Intelligence для проверки на устройстве или укажите адрес сервера Unbrick.")
         case .rateLimited: return L.s("Too many requests. Wait a minute, then try again.", "Слишком много запросов. Подождите минуту.")
         case .refused: return L.s("Claude declined this one. Try a different answer.", "Claude отказался отвечать. Попробуйте другой ответ.")
+        case .offline: return L.s("You appear to be offline. Try again when you have a connection.", "Нет сети. Попробуйте, когда появится соединение.")
         case .server(let c, let m): return L.s("The AI service had a problem (\(c)). \(m)", "Ошибка сервиса ИИ (\(c)). \(m)")
         case .badReply: return L.s("The AI reply couldn't be read. Try again.", "Не удалось прочитать ответ ИИ. Попробуйте ещё раз.")
         }
     }
 }
 
-/// Minimal Messages API client (raw HTTPS; there is no official Swift SDK).
+/// Talks to the Unbrick proxy (`backend/`). The proxy owns the model, the JSON schema, and the Anthropic key.
 enum Claude {
-    static let model = "claude-opus-5-5"
-
-    /// One request that must come back as JSON matching `schema` (structured outputs).
-    static func json(system: String, messages: [[String: String]], schema: [String: Any], effort: String = "low") async throws -> [String: Any] {
-        guard let key = APIKey.value else { throw ClaudeError.noKey }
-        var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
+    static func json(system: String, messages: [[String: String]], task: String, effort: String = "low") async throws -> [String: Any] {
+        guard let base = ProxyConfig.baseURL, let token = ProxyConfig.appToken else { throw ClaudeError.notConfigured }
+        var req = URLRequest(url: base.appending(path: "v1/task"))
         req.httpMethod = "POST"
-        req.timeoutInterval = 120
+        req.timeoutInterval = 90
         req.setValue("application/json", forHTTPHeaderField: "content-type")
-        req.setValue(key, forHTTPHeaderField: "x-api-key")
-        req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        // Server-side fallback: if a safety classifier declines, the API retries on Anthropic's recommended model.
-        req.setValue("server-side-fallback-2026-07-01", forHTTPHeaderField: "anthropic-beta")
-        let body: [String: Any] = [
-            "model": model,
-            "max_tokens": 16000,
-            "fallbacks": "default",
-            "system": system,
-            "messages": messages,
-            "output_config": ["effort": effort, "format": ["type": "json_schema", "schema": schema]]
-        ]
+        req.setValue(token, forHTTPHeaderField: "X-Unbrick-Token")
+        let body: [String: Any] = ["task": task, "system": system, "messages": messages, "effort": effort]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let data: Data
+        let resp: URLResponse
+        do {
+            (data, resp) = try await URLSession.shared.data(for: req)
+        } catch let error as URLError {
+            switch error.code {
+            case .notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed:
+                throw ClaudeError.offline
+            default:
+                throw ClaudeError.server(0, error.localizedDescription)
+            }
+        }
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         switch code {
-        case 200: break
-        case 401, 403: throw ClaudeError.badKey
+        case 200: return obj
+        case 401, 403: throw ClaudeError.notConfigured
         case 429: throw ClaudeError.rateLimited
+        case 422: throw ClaudeError.refused
         default:
             let msg = ((obj["error"] as? [String: Any])?["message"] as? String) ?? ""
             throw ClaudeError.server(code, msg)
         }
-        if (obj["stop_reason"] as? String) == "refusal" { throw ClaudeError.refused }
-        let text = (obj["content"] as? [[String: Any]] ?? [])
-            .filter { ($0["type"] as? String) == "text" }
-            .compactMap { $0["text"] as? String }
-            .joined()
-        guard let d = text.data(using: .utf8), let parsed = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { throw ClaudeError.badReply }
-        return parsed
     }
-
-    // MARK: schemas (strict: every property required, no extras)
-
-    static func object(_ props: [String: Any]) -> [String: Any] {
-        ["type": "object", "properties": props, "required": Array(props.keys), "additionalProperties": false]
-    }
-    static let str: [String: Any] = ["type": "string"]
-    static let mistakes: [String: Any] = ["type": "array", "items": object(["wrong": str, "right": str, "why": str])]
-    static let suggestion: [String: Any] = object(["ko": str, "m": str])
-
-    static let judgeSchema = object([
-        "correct": ["type": "boolean"], "feedback": str, "fix": str, "mistakes": mistakes, "grammar": str
-    ])
-    static let tutorSchema = object([
-        "verdict": ["type": "string", "enum": ["correct", "incorrect", "none"]],
-        "feedback": str, "mistakes": mistakes, "fix": str, "grammar": str, "question": str, "gloss": str,
-        "suggestions": object(["casual": suggestion, "polite": suggestion, "formal": suggestion, "note": str])
-    ])
-    static let cardsSchema = object(["cards": ["type": "array", "items": object(["t": str, "m": str])]])
 }
 
 struct Mistake: Hashable { var wrong: String; var right: String; var why: String }
