@@ -93,8 +93,12 @@ enum ProxyConfig {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    static var privacyURL: URL? {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: "UNBRICK_PRIVACY_URL") as? String else { return nil }
+    static var privacyURL: URL? { httpsURL("UNBRICK_PRIVACY_URL") }
+
+    static var supportURL: URL? { httpsURL("UNBRICK_SUPPORT_URL") }
+
+    private static func httpsURL(_ key: String) -> URL? {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: trimmed), url.scheme?.lowercased() == "https" else { return nil }
         return url

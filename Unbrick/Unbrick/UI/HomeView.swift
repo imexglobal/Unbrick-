@@ -88,7 +88,7 @@ struct HomeView: View {
                 } else {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(L.s("Bricked", "Заблокировано")).font(.system(size: 40, weight: .heavy))
+                            Text(L.s("Time to practice", "Время заниматься")).font(.system(size: 34, weight: .heavy))
                             Text(store.state.screenTimeReady
                                  ? L.s("Screen Time is on · \(store.state.intensity.minutes) min per unlock", "Экранное время включено · \(store.state.intensity.minutes) мин за раз")
                                  : L.s("Practice shield · Screen Time is not set up yet", "Тренировочный щит · Экранное время ещё не настроено"))
@@ -216,7 +216,7 @@ struct HomeView: View {
 
     var appsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack { Text(L.s("Blocked apps", "Заблокированные приложения")).font(.title3.bold()); Spacer()
+            HStack { Text(L.s("Practice shortcuts", "Тренировочные ярлыки")).font(.title3.bold()); Spacer()
                 Button(editingApps ? L.s("Done", "Готово") : L.s("Edit", "Изменить")) { editingApps.toggle() } }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 14) {
                 ForEach(Array(store.state.apps.enumerated()), id: \.element.id) { i, a in

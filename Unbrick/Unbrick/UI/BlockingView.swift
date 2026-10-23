@@ -34,8 +34,8 @@ struct BlockingGuideView: View {
                      "Блокирует сам iOS через «Экранное время». Unbrick хранит код-пароль на этом iPhone и показывает его только после пройденного занятия."))
                 .foregroundStyle(Color.muted)
             TipBox(kind: .info, title: L.s("What this build can block", "Что умеет эта сборка"),
-                   bodyText: L.s("Unbrick cannot switch other apps off by itself until Apple approves the Family Controls entitlement. Until then, Screen Time is the block, and the tiles on Home are practice shortcuts.",
-                                 "Unbrick сам не выключает другие приложения, пока Apple не одобрит разрешение Family Controls. До этого блокирует Экранное время, а значки на главной — только тренировка."))
+                   bodyText: L.s("Unbrick does not close other apps. The tiles on Home are practice shortcuts. Screen Time, which you set up in Settings, is what can limit those apps.",
+                                 "Unbrick сам не закрывает другие приложения. Значки на главной — тренировочные ярлыки. Ограничивает их «Экранное время», которое вы включаете в Настройках."))
 
             if let code {
                 VStack(spacing: 6) {

@@ -35,26 +35,29 @@ Spend is stored in one Durable Object (`SPEND` / `SpendGuard`), not KV. A hard c
 - [ ] Confirm `GET https://<your-worker>/health` returns `"configured": true` and `"spendGuard": true`.
 - [ ] Read `backend/README.md` for the full env list.
 
-## 2. Privacy page
+## 2. Privacy policy and support
 
-- [ ] Edit `Unbrick/web/privacy.html`: replace `[legal name of the developer or company]` and `[support email]`.
-- [ ] Host the file at a public HTTPS URL (Cloudflare Pages, GitHub Pages, or any static host). App Store Connect and Play Console both require a privacy policy URL.
-- [ ] Put that URL in `UNBRICK_PRIVACY_URL` in `Unbrick/Config/Info.plist`.
+The pages are served by the worker. Publisher is IMEX Global. Contact is hellopawfend@gmail.com. No separate host.
+
+- [ ] Deploy this worker before you submit: `cd backend && npx wrangler deploy`. Until that deploy, `/privacy` and `/support` are not on the live worker.
+- [ ] Confirm `https://unbrick-api.unbrick.workers.dev/privacy` and `https://unbrick-api.unbrick.workers.dev/support` load in a browser and name IMEX Global.
+- [ ] Those URLs are already in `Unbrick/Config/Info.plist` as `UNBRICK_PRIVACY_URL` and `UNBRICK_SUPPORT_URL`. Profile → Privacy policy links to both.
+- [ ] Paste the same two URLs into App Store Connect (Privacy Policy URL and Support URL). The listing text is `store/APP_STORE_LISTING.md`.
 
 ## 3. Point the iOS app at the server
 
-- [ ] In `Unbrick/Config/Info.plist`, set `UNBRICK_API_BASE` to the worker origin only, for example `https://unbrick-api.<account>.workers.dev` (no `/v1/task`).
-- [ ] Set `UNBRICK_APP_TOKEN` to the same string as `APP_TOKEN`.
-- [ ] Leave both empty in any build you don't want calling Claude. Those builds fall back to Apple Intelligence on the device.
+- [x] `UNBRICK_API_BASE` is `https://unbrick-api.unbrick.workers.dev` (no `/v1/task`).
+- [ ] Before you archive, set `UNBRICK_APP_TOKEN` in `Unbrick/Config/Info.plist` to the same string as the worker secret `APP_TOKEN`. The repo copy is empty on purpose. Without it, the server tutor stays off and the app uses on-device Apple Intelligence only. Do not put the Anthropic key in the plist.
+- [ ] Leave the token empty in any build you don't want calling Claude. Those builds fall back to Apple Intelligence on the device.
 - [ ] A Debug build may use `http://localhost` or `http://127.0.0.1` for `wrangler dev`. Release builds accept only `https`.
 
 ## 4. Apple Developer and signing
 
 - [ ] Enroll in the Apple Developer Program.
-- [ ] Confirm the team id in `Unbrick/Unbrick.xcodeproj/project.pbxproj` (`DEVELOPMENT_TEAM`, currently `4U2PAVU9J3`) is your team. Change it if it is not.
+- [x] Team id in `Unbrick/Unbrick.xcodeproj/project.pbxproj` is `6388ACWLTQ` (`DEVELOPMENT_TEAM`).
 - [ ] Confirm the bundle id `com.imexglobalintl.unbrick`. It cannot be changed after the first App Store upload.
-- [ ] In Xcode, open `Unbrick/Unbrick.xcodeproj`, select the shared Unbrick scheme, and set signing to your team (Automatic is already selected).
-- [ ] Version is `1.0` (`MARKETING_VERSION`) and build `1` (`CURRENT_PROJECT_VERSION`). Raise the build number for every upload after the first. Never reuse a build number.
+- [ ] In Xcode, open `Unbrick/Unbrick.xcodeproj`, select the shared Unbrick scheme, and set signing to team 6388ACWLTQ (Automatic is already selected).
+- [x] Version is `1.0` (`MARKETING_VERSION`) and build `2` (`CURRENT_PROJECT_VERSION`). Build 1 is already in TestFlight. Never reuse a build number.
 
 ## 5. Family Controls (real app blocking)
 
@@ -62,7 +65,7 @@ The app does not block other apps by itself. Home-screen tiles are practice shor
 
 - [ ] If you want Unbrick itself to shield apps, request the Family Controls (Distribution) entitlement from Apple for `com.imexglobalintl.unbrick`, for an individual (not a child) authorization.
 - [ ] Do not add `Unbrick/Config/FamilyControls.entitlements.example` to the target before Apple approves it. Signing fails until the profile contains the capability. The file explains the two lines to add after approval.
-- [ ] After approval, implement `AuthorizationCenter` (`.individual`), `FamilyActivityPicker`, and `ManagedSettings` shields, plus a Device Activity Monitor extension so the shield comes back when the phone is locked and the app is not running. `NSFamilyControlsUsageDescription` is already in Info.plist.
+- [ ] After approval, implement `AuthorizationCenter` (`.individual`), `FamilyActivityPicker`, and `ManagedSettings` shields, plus a Device Activity Monitor extension so the shield comes back when the phone is locked and the app is not running. `NSFamilyControlsUsageDescription` was removed from this submission. The example file has the string to put back.
 - [ ] Do not instruct people to disable Apple Account recovery for the Screen Time passcode. The in-app steps no longer say that. A lost passcode with recovery turned off can lock Screen Time with no way back, and review treats "disable recovery" as circumventing device security.
 
 ## 6. Privacy labels and permissions
@@ -72,8 +75,8 @@ Already in the project, for you to mirror in App Store Connect:
 - [ ] Microphone: `NSMicrophoneUsageDescription`
 - [ ] Speech recognition: `NSSpeechRecognitionUsageDescription`
 - [ ] Notifications: there is no plist string. The system prompt is the local "unlock ended" alert. Answer the notifications question in App Store Connect as local notifications, not push.
-- [ ] Family Controls string is present for the day the entitlement is on. The binary does not call that API yet.
-- [ ] `PrivacyInfo.xcprivacy` declares no tracking, audio data, and other user content (the answer text), both for app functionality and not linked to identity. Match the nutrition labels to that, and to `Unbrick/web/privacy.html`.
+- [x] This build has no Family Controls purpose string and does not call that API. Do not tell App Review that the app shields other apps.
+- [ ] `PrivacyInfo.xcprivacy` declares no tracking. It declares audio data, other user content (answer text), and a user id (the random install id), each for app functionality and not linked to identity. Match the nutrition labels in `store/APP_STORE_LISTING.md`.
 - [ ] `ITSAppUsesNonExemptEncryption` is false (HTTPS only). You can answer the export question as no non-exempt encryption.
 - [ ] The 1024×1024 app icon has no alpha channel (`Unbrick/Unbrick/Assets.xcassets/AppIcon.appiconset/icon.png`).
 
@@ -81,7 +84,7 @@ Already in the project, for you to mirror in App Store Connect:
 
 - [ ] Archive the Release scheme in Xcode and upload with the Organizer or `xcodebuild -exportArchive`.
 - [ ] On a phone: speak an answer, finish a card set, open the tutor, and confirm Claude replies only after the worker is configured. Confirm Profile no longer asks for an API key.
-- [ ] Create the App Store Connect record, screenshots, description, age rating, support URL, and the privacy policy URL.
+- [ ] The App Store Connect record is “Unbrick: Learn Korean”. Paste subtitle, description, keywords, age rating, privacy answers, and review notes from `store/APP_STORE_LISTING.md`. Support URL is `https://unbrick-api.unbrick.workers.dev/support`. Privacy URL is `https://unbrick-api.unbrick.workers.dev/privacy`.
 - [ ] Submit for review. Mention that blocking is Screen Time the user configures, and that answer text is sent to your server and then Anthropic when Claude is enabled.
 
 ## 8. Google Play
@@ -92,7 +95,7 @@ Do not start a Flutter or React Native rewrite. The recommendation is in `androi
 - [ ] Open `android/` in Android Studio. Copy `local.properties.example`'s two lines into `local.properties` with the same base URL and app token.
 - [ ] Generate a Play upload key and turn Play App Signing on. Nothing in the repo is a keystore.
 - [ ] The scaffold is not a store-ready port. Before you list it: quizzes, review, a real blocking design (usage access / accessibility / device policy — not a port of the iOS passcode), a launcher icon from the iOS 1024 asset, and the Data safety form (microphone, speech text sent to your server, no ads, no account).
-- [ ] Use the same privacy policy URL.
+- [ ] Use `https://unbrick-api.unbrick.workers.dev/privacy` as the privacy policy URL.
 
 ## 9. If a key ever leaked
 

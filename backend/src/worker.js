@@ -7,6 +7,7 @@
  * Spend is reserved in the SpendGuard Durable Object before Anthropic is called.
  */
 
+import { privacyHtml, supportHtml } from "./pages.js";
 import {
   RESTING_MESSAGE,
   SpendGuard,
@@ -244,6 +245,16 @@ export async function handleRequest(request, env = {}, deps = {}) {
       ok: true,
       configured: Boolean(env.ANTHROPIC_API_KEY && env.APP_TOKEN),
       spendGuard: Boolean(env.SPEND) || Boolean(deps.ledger),
+    });
+  }
+  if (request.method === "GET" && (url.pathname === "/privacy" || url.pathname === "/support")) {
+    const body = url.pathname === "/privacy" ? privacyHtml : supportHtml;
+    return new Response(body, {
+      status: 200,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "public, max-age=300",
+      },
     });
   }
   if (request.method !== "POST" || url.pathname !== "/v1/task") {

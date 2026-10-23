@@ -14,7 +14,8 @@ What you still have to do by hand (accounts, signing, the API key, TestFlight, s
 | `Unbrick/Unbrick/Resources/Content.json` | Lessons bundled in the app |
 | `Unbrick/content` | Per-unit source JSON |
 | `Unbrick/Config/Info.plist` | Usage strings, bundle URL scheme, server URL and app token |
-| `Unbrick/web/privacy.html` | Privacy policy to host before submission |
+| `Unbrick/web/privacy.html` | Same privacy policy the worker serves at `/privacy` |
+| `store/APP_STORE_LISTING.md` | Paste-ready App Store Connect text |
 | `Unbrick/web/unbrick.html` | Browser prototype. It is not the store binary. |
 | `backend` | Claude proxy. Env vars are in `backend/README.md`. |
 | `android` | Compose scaffold |

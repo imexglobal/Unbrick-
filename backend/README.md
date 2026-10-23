@@ -45,4 +45,6 @@ The first deploy applies the `v1` migration that creates `SpendGuard`. Leave tha
 
 `GET /health` returns `{ "ok": true, "configured": true, "spendGuard": true }` when both secrets are present and the Durable Object binding is there. It does not check that the Anthropic key is valid.
 
+`GET /privacy` and `GET /support` are public HTML pages (IMEX Global, hellopawfend@gmail.com). They do not require the app token. The iOS app links to them.
+
 The same `APP_TOKEN` value goes in `Unbrick/Config/Info.plist` as `UNBRICK_APP_TOKEN`, and the worker URL (no trailing path) goes in `UNBRICK_API_BASE`. Android reads the same pair from `android/local.properties`. See `LAUNCH.md`.

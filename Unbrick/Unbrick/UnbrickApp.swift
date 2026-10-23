@@ -49,7 +49,7 @@ struct ShieldFlow: View {
 
 struct IsUnbrickLockedIntent: AppIntent {
     static var title: LocalizedStringResource = "Is Unbrick Locked"
-    static var description = IntentDescription("True while your apps are bricked; false during an unlock window.")
+    static var description = IntentDescription("True while the practice lock is on; false during an unlock timer.")
 
     func perform() async throws -> some IntentResult & ReturnsValue<Bool> {
         .result(value: Store.lockedNow())
@@ -58,7 +58,7 @@ struct IsUnbrickLockedIntent: AppIntent {
 
 struct ShowShieldIntent: AppIntent {
     static var title: LocalizedStringResource = "Show Unbrick Shield"
-    static var description = IntentDescription("Opens Unbrick on the bricked screen so you can speak Korean to unlock.")
+    static var description = IntentDescription("Opens Unbrick's practice lock so you can speak Korean.")
     static var openAppWhenRun = true
 
     @Parameter(title: "App name", default: "This app")
