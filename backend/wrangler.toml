@@ -3,11 +3,31 @@ main = "src/worker.js"
 compatibility_date = "2026-10-01"
 
 [vars]
-ANTHROPIC_MODEL = "claude-opus-5-5"
+ANTHROPIC_MODEL = "claude-haiku-5-5"
 ANTHROPIC_VERSION = "2023-06-01"
-MAX_TOKENS = "4096"
+MAX_TOKENS = "1024"
 RATE_LIMIT_PER_MINUTE = "12"
+# US$0.55/day paces a US$100 total across about six months. Both are hard caps.
+DAILY_BUDGET_USD = "0.55"
+TOTAL_BUDGET_USD = "100"
+DEVICE_DAILY_LIMIT = "30"
+# Haiku 5.5, prompts ≤100k tokens, prices as published 2026-10-07.
+# Cache write is the 1-hour rate so a later cache_control cannot be undercounted.
+# If you change ANTHROPIC_MODEL, change these prices in the same edit.
+PRICE_INPUT_PER_MTOK = "0.10"
+PRICE_OUTPUT_PER_MTOK = "0.50"
+PRICE_CACHE_WRITE_PER_MTOK = "0.20"
+PRICE_CACHE_READ_PER_MTOK = "0.01"
+RESERVE_TOKENS_PER_CHAR = "2"
 # Leave ANTHROPIC_BETA unset unless you still want a beta header.
 # APP_TOKEN and ANTHROPIC_API_KEY are secrets. Do not put them here.
 #   npx wrangler secret put ANTHROPIC_API_KEY
 #   npx wrangler secret put APP_TOKEN
+
+[[durable_objects.bindings]]
+name = "SPEND"
+class_name = "SpendGuard"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SpendGuard"]

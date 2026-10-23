@@ -1,9 +1,20 @@
 /**
  * Unbrick's Claude proxy. The Anthropic key stays in the worker environment.
- * The app sends a task name plus the lesson prompt; this file owns the model and the JSON schema.
+ * The app sends a task name plus the lesson prompt; this file owns the model,
+ * the JSON schema, and the spend cap.
  *
  * Deploy on Cloudflare Workers so CF-Connecting-IP is the real client address.
+ * Spend is reserved in the SpendGuard Durable Object before Anthropic is called.
  */
+
+import {
+  RESTING_MESSAGE,
+  SpendGuard,
+  budgetConfig,
+  estimateReserveMicro,
+} from "./spend.js";
+
+export { SpendGuard };
 
 const str = { type: "string" };
 
@@ -63,6 +74,14 @@ const LIMITS = {
   messageChars: 4_000,
 };
 
+const SENT = {
+  history: 6,
+  messageChars: 800,
+  systemChars: 4_000,
+};
+
+const DEVICE_ID = /^[A-Za-z0-9_-]{8,80}$/;
+
 const memoryBuckets = new Map();
 
 export function resetRateLimits() {
@@ -81,6 +100,10 @@ function json(status, body) {
 
 function fail(status, code, message) {
   return json(status, { error: { code, message } });
+}
+
+function resting(reason) {
+  return json(429, { error: { code: "resting", reason, message: RESTING_MESSAGE } });
 }
 
 function safeMessage(value) {
@@ -152,6 +175,22 @@ export function validateTask(body) {
   return { value: { task, system: body.system, messages, effort } };
 }
 
+/** Keep the tail of the chat. Haiku is billed on what we send, so the tail is enough. */
+export function trimForModel(value) {
+  let messages = value.messages.map((message) => ({
+    role: message.role,
+    content: message.content.length > SENT.messageChars ? message.content.slice(-SENT.messageChars) : message.content,
+  }));
+  if (messages.length > SENT.history) messages = messages.slice(-SENT.history);
+  while (messages.length && messages[0].role !== "user") messages.shift();
+  return {
+    task: value.task,
+    system: value.system.slice(0, SENT.systemChars),
+    messages,
+    effort: "low",
+  };
+}
+
 function textFromMessage(payload) {
   const blocks = Array.isArray(payload.content) ? payload.content : [];
   return blocks
@@ -160,13 +199,52 @@ function textFromMessage(payload) {
     .join("");
 }
 
+function remoteLedger(namespace) {
+  const stub = namespace.get(namespace.idFromName("global"));
+  const call = async (op, body) => {
+    const res = await stub.fetch(`https://spend.internal/${op}`, {
+      method: "POST",
+      body: JSON.stringify(body || {}),
+    });
+    return res.json();
+  };
+  return {
+    reserve: (body) => call("reserve", body),
+    commit: (body) => call("commit", body),
+    release: (body) => call("release", body),
+  };
+}
+
+function openLedger(env, deps) {
+  if (deps.ledger) return deps.ledger;
+  if (env.SPEND) return remoteLedger(env.SPEND);
+  return null;
+}
+
+async function settle(ledger, held, payload) {
+  const usage = payload && payload.usage;
+  try {
+    if (usage && typeof usage === "object") {
+      await ledger.commit({ id: held.id, usage, prices: held.prices });
+    } else {
+      await ledger.release({ id: held.id });
+    }
+  } catch {
+    // A stuck reservation shrinks the remaining budget. That is the safe direction.
+  }
+}
+
 export async function handleRequest(request, env = {}, deps = {}) {
   const now = deps.now || (() => Date.now());
   const fetchImpl = deps.fetch || fetch;
   const url = new URL(request.url);
 
   if (request.method === "GET" && url.pathname === "/health") {
-    return json(200, { ok: true, configured: Boolean(env.ANTHROPIC_API_KEY && env.APP_TOKEN) });
+    return json(200, {
+      ok: true,
+      configured: Boolean(env.ANTHROPIC_API_KEY && env.APP_TOKEN),
+      spendGuard: Boolean(env.SPEND) || Boolean(deps.ledger),
+    });
   }
   if (request.method !== "POST" || url.pathname !== "/v1/task") {
     return fail(404, "not_found", "Use POST /v1/task.");
@@ -193,16 +271,26 @@ export async function handleRequest(request, env = {}, deps = {}) {
   const parsed = validateTask(body);
   if (parsed.error) return fail(400, "bad_request", parsed.error);
 
-  const maxTokens = Math.min(8_000, Math.max(256, Number(env.MAX_TOKENS || 4_096)));
-  const model = env.ANTHROPIC_MODEL || "claude-opus-5-5";
+  const device = request.headers.get("x-unbrick-device") || "";
+  if (!DEVICE_ID.test(device)) {
+    return fail(400, "bad_device", "Send a stable device id in X-Unbrick-Device.");
+  }
+
+  const ledger = openLedger(env, deps);
+  if (!ledger) return fail(503, "spend_guard", "The spend guard is not configured.");
+
+  const cfg = budgetConfig(env);
+  const trimmed = trimForModel(parsed.value);
+  const maxTokens = Math.min(2048, Math.max(256, Number(env.MAX_TOKENS || 1024)));
+  const model = env.ANTHROPIC_MODEL || "claude-haiku-5-5";
   const upstream = {
     model,
     max_tokens: maxTokens,
-    system: POLICY + parsed.value.system,
-    messages: parsed.value.messages,
+    system: POLICY + trimmed.system,
+    messages: trimmed.messages,
     output_config: {
-      effort: parsed.value.effort,
-      format: { type: "json_schema", schema: SCHEMAS[parsed.value.task] },
+      effort: "low",
+      format: { type: "json_schema", schema: SCHEMAS[trimmed.task] },
     },
   };
   const headers = {
@@ -212,6 +300,22 @@ export async function handleRequest(request, env = {}, deps = {}) {
   };
   if (env.ANTHROPIC_BETA) headers["anthropic-beta"] = env.ANTHROPIC_BETA;
 
+  const reserveMicro = estimateReserveMicro(JSON.stringify(upstream).length, maxTokens, cfg);
+  let held;
+  try {
+    held = await ledger.reserve({
+      device,
+      reserveMicro,
+      dailyMicro: cfg.dailyMicro,
+      totalMicro: cfg.totalMicro,
+      deviceDailyLimit: cfg.deviceDailyLimit,
+    });
+  } catch {
+    return fail(503, "spend_guard", "The spend guard could not be reached.");
+  }
+  if (!held || !held.ok) return resting((held && held.reason) || "daily");
+  held.prices = cfg.prices;
+
   let upstreamResp;
   try {
     upstreamResp = await fetchImpl("https://api.anthropic.com/v1/messages", {
@@ -220,6 +324,7 @@ export async function handleRequest(request, env = {}, deps = {}) {
       body: JSON.stringify(upstream),
     });
   } catch {
+    await settle(ledger, held, {});
     return fail(502, "upstream", "The AI service could not be reached.");
   }
 
@@ -230,6 +335,7 @@ export async function handleRequest(request, env = {}, deps = {}) {
   } catch {
     payload = {};
   }
+  await settle(ledger, held, payload);
   if (upstreamResp.status === 429) return fail(429, "rate_limited", "The AI service is busy. Wait a minute.");
   if (!upstreamResp.ok) {
     const message = safeMessage(payload.error && payload.error.message);

@@ -40,17 +40,13 @@ enum AI {
     static func judge(system: String, prompt: String) async throws -> [String: Any] {
         switch engine {
         case .claude:
-            return try await Claude.json(system: system, messages: [["role": "user", "content": prompt]], task: "judge")
-        case .onDevice:
-            #if canImport(FoundationModels)
-            if #available(iOS 26.0, *) {
-                let session = LanguageModelSession(instructions: system)
-                let r = try await session.respond(to: prompt, generating: ODJudgment.self).content
-                return ["correct": r.correct, "feedback": r.feedback, "fix": r.fix, "grammar": r.grammar,
-                        "mistakes": r.mistakes.map { ["wrong": $0.wrong, "right": $0.right, "why": $0.why] }]
+            return try await withClaude {
+                try await Claude.json(system: system, messages: [["role": "user", "content": prompt]], task: "judge")
+            } fallback: {
+                try await judgeOnDevice(system: system, prompt: prompt)
             }
-            #endif
-            throw ClaudeError.notConfigured
+        case .onDevice:
+            return try await judgeOnDevice(system: system, prompt: prompt)
         case .none:
             throw ClaudeError.notConfigured
         }
@@ -61,20 +57,13 @@ enum AI {
     static func tutor(system: String, turns: [[String: String]]) async throws -> [String: Any] {
         switch engine {
         case .claude:
-            return try await Claude.json(system: system, messages: turns, task: "tutor")
-        case .onDevice:
-            #if canImport(FoundationModels)
-            if #available(iOS 26.0, *) {
-                let session = LanguageModelSession(instructions: system)
-                let transcript = turns.map { ($0["role"] == "assistant" ? "Tutor: " : "") + ($0["content"] ?? "") }.joined(separator: "\n")
-                let r = try await session.respond(to: transcript + "\n\nReply as the tutor now.", generating: ODTutor.self).content
-                func idea(_ i: ODIdea) -> [String: Any] { ["ko": i.ko, "m": i.m] }
-                return ["verdict": r.verdict, "feedback": r.feedback, "fix": r.fix, "grammar": r.grammar, "question": r.question, "gloss": r.gloss,
-                        "mistakes": r.mistakes.map { ["wrong": $0.wrong, "right": $0.right, "why": $0.why] },
-                        "suggestions": ["casual": idea(r.casual), "polite": idea(r.polite), "formal": idea(r.formal), "note": r.note]]
+            return try await withClaude {
+                try await Claude.json(system: system, messages: turns, task: "tutor")
+            } fallback: {
+                try await tutorOnDevice(system: system, turns: turns)
             }
-            #endif
-            throw ClaudeError.notConfigured
+        case .onDevice:
+            return try await tutorOnDevice(system: system, turns: turns)
         case .none:
             throw ClaudeError.notConfigured
         }
@@ -85,20 +74,67 @@ enum AI {
     static func cards(system: String, prompt: String) async throws -> [[String: Any]] {
         switch engine {
         case .claude:
-            let r = try await Claude.json(system: system, messages: [["role": "user", "content": prompt]], task: "cards", effort: "medium")
-            return r["cards"] as? [[String: Any]] ?? []
-        case .onDevice:
-            #if canImport(FoundationModels)
-            if #available(iOS 26.0, *) {
-                let session = LanguageModelSession(instructions: system)
-                let r = try await session.respond(to: prompt, generating: ODCards.self).content
-                return r.cards.map { ["t": $0.t, "m": $0.m] }
+            return try await withClaude {
+                let r = try await Claude.json(system: system, messages: [["role": "user", "content": prompt]], task: "cards", effort: "medium")
+                return r["cards"] as? [[String: Any]] ?? []
+            } fallback: {
+                try await cardsOnDevice(system: system, prompt: prompt)
             }
-            #endif
-            throw ClaudeError.notConfigured
+        case .onDevice:
+            return try await cardsOnDevice(system: system, prompt: prompt)
         case .none:
             throw ClaudeError.notConfigured
         }
+    }
+
+    /// The server budget is used up. Say so, then keep going on device when Apple Intelligence is on.
+    private static func withClaude<T>(_ call: () async throws -> T, fallback: () async throws -> T) async throws -> T {
+        do {
+            return try await call()
+        } catch ClaudeError.resting {
+            guard onDeviceReady else { throw ClaudeError.resting }
+            let text = ClaudeError.resting.errorDescription ?? "AI tutor is resting, try again tomorrow"
+            await MainActor.run { Store.shared.flash(text) }
+            return try await fallback()
+        }
+    }
+
+    private static func judgeOnDevice(system: String, prompt: String) async throws -> [String: Any] {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            let session = LanguageModelSession(instructions: system)
+            let r = try await session.respond(to: prompt, generating: ODJudgment.self).content
+            return ["correct": r.correct, "feedback": r.feedback, "fix": r.fix, "grammar": r.grammar,
+                    "mistakes": r.mistakes.map { ["wrong": $0.wrong, "right": $0.right, "why": $0.why] }]
+        }
+        #endif
+        throw ClaudeError.notConfigured
+    }
+
+    private static func tutorOnDevice(system: String, turns: [[String: String]]) async throws -> [String: Any] {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            let session = LanguageModelSession(instructions: system)
+            let transcript = turns.map { ($0["role"] == "assistant" ? "Tutor: " : "") + ($0["content"] ?? "") }.joined(separator: "\n")
+            let r = try await session.respond(to: transcript + "\n\nReply as the tutor now.", generating: ODTutor.self).content
+            func idea(_ i: ODIdea) -> [String: Any] { ["ko": i.ko, "m": i.m] }
+            return ["verdict": r.verdict, "feedback": r.feedback, "fix": r.fix, "grammar": r.grammar, "question": r.question, "gloss": r.gloss,
+                    "mistakes": r.mistakes.map { ["wrong": $0.wrong, "right": $0.right, "why": $0.why] },
+                    "suggestions": ["casual": idea(r.casual), "polite": idea(r.polite), "formal": idea(r.formal), "note": r.note]]
+        }
+        #endif
+        throw ClaudeError.notConfigured
+    }
+
+    private static func cardsOnDevice(system: String, prompt: String) async throws -> [[String: Any]] {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            let session = LanguageModelSession(instructions: system)
+            let r = try await session.respond(to: prompt, generating: ODCards.self).content
+            return r.cards.map { ["t": $0.t, "m": $0.m] }
+        }
+        #endif
+        throw ClaudeError.notConfigured
     }
 }
 

@@ -166,8 +166,8 @@ struct ProfileView: View {
 
     var aiBlurb: String {
         if ProxyConfig.isConfigured {
-            return L.s("Spoken and typed answers are sent to Unbrick's server so Claude can reply. The server does not keep them. Your Anthropic key is not on this phone.",
-                       "Произнесённые и написанные ответы уходят на сервер Unbrick, чтобы ответил Claude. Сервер их не хранит. Ключ Anthropic на телефоне не хранится.")
+            return L.s("Spoken and typed answers are sent to Unbrick's server so Claude can reply. The server does not keep them. Your Anthropic key is not on this phone. If the shared daily budget is used up, this phone says the tutor is resting and checks on device when Apple Intelligence is on.",
+                       "Произнесённые и написанные ответы уходят на сервер Unbrick, чтобы ответил Claude. Сервер их не хранит. Ключ Anthropic на телефоне не хранится. Если общий дневной лимит исчерпан, телефон сообщит, что репетитор отдыхает, и проверит ответ на устройстве, если включён Apple Intelligence.")
         }
         return L.s("This build has no Unbrick server yet, so Claude is off. Apple Intelligence on this iPhone can still check answers when it is turned on. Nothing you say is sent to Anthropic.",
                    "В этой сборке сервер Unbrick ещё не указан, поэтому Claude выключен. Apple Intelligence на этом iPhone может проверять ответы, если он включён. Anthropic ничего не получает.")

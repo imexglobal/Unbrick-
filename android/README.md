@@ -7,7 +7,7 @@ This module is a Jetpack Compose scaffold. It reads the same `Unbrick/Unbrick/Re
 What works in the scaffold:
 
 - List of the 16 KIIP units, with vocabulary and the English or Russian gloss
-- A tutor screen that posts `tutor` tasks to `/v1/task`, plus the system speech recognizer and Korean text-to-speech
+- A tutor screen that posts `tutor` tasks to `/v1/task`, plus the system speech recognizer and Korean text-to-speech. Each install sends a stable `X-Unbrick-Device` id. At the daily message cap, or when the shared US$0.55 / US$100 budget is used up, the screen shows "AI tutor is resting, try again tomorrow". Android has no on-device model to fall back to.
 
 What is not built, and has to be designed for Android on its own:
 
