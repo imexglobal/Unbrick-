@@ -64,6 +64,31 @@ struct DayLog: Codable {
     var correct = 0
     var unlocks = 0
     var units: [Int] = []
+    /// "level-unit" pairs studied that day. Older saves only have `units`, which were level 3.
+    var marks: [String] = []
+
+    init() {}
+
+    /// A missing `marks` key must not fail the decode, or the whole activity history is dropped.
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        answered = (try? c.decode(Int.self, forKey: .answered)) ?? 0
+        correct = (try? c.decode(Int.self, forKey: .correct)) ?? 0
+        unlocks = (try? c.decode(Int.self, forKey: .unlocks)) ?? 0
+        units = (try? c.decode([Int].self, forKey: .units)) ?? []
+        marks = (try? c.decode([String].self, forKey: .marks)) ?? []
+    }
+
+    func encode(to e: Encoder) throws {
+        var c = e.container(keyedBy: CodingKeys.self)
+        try c.encode(answered, forKey: .answered)
+        try c.encode(correct, forKey: .correct)
+        try c.encode(unlocks, forKey: .unlocks)
+        try c.encode(units, forKey: .units)
+        try c.encode(marks, forKey: .marks)
+    }
+
+    private enum CodingKeys: String, CodingKey { case answered, correct, unlocks, units, marks }
 }
 
 enum Tab: Hashable { case home, learn, calendar, profile }
@@ -88,6 +113,7 @@ struct AppState: Codable {
     var tutorQ = 0
     var tutorOk = 0
     var l3done = false
+    var doneLevels: [Int] = []
     var screenTimeReady = false     // passcode + App Limits set up in iOS Settings
     var activity: [String: DayLog] = [:]   // "yyyy-MM-dd" → what was studied that day
     var apps: [BlockedApp] = [
@@ -117,6 +143,7 @@ struct AppState: Codable {
         tutorQ = (try? c.decode(Int.self, forKey: .tutorQ)) ?? 0
         tutorOk = (try? c.decode(Int.self, forKey: .tutorOk)) ?? 0
         l3done = (try? c.decode(Bool.self, forKey: .l3done)) ?? false
+        doneLevels = (try? c.decode([Int].self, forKey: .doneLevels)) ?? []
         screenTimeReady = (try? c.decode(Bool.self, forKey: .screenTimeReady)) ?? false
         activity = (try? c.decode([String: DayLog].self, forKey: .activity)) ?? [:]
         apps = (try? c.decode([BlockedApp].self, forKey: .apps)) ?? def.apps
@@ -230,23 +257,34 @@ final class Store: ObservableObject {
 
     func srs(_ id: String) -> SRS { state.srs[id] ?? SRS() }
     func mastered(_ c: Card) -> Bool { srs(c.id).box >= Self.masteredBox }
+    var levelBook: [Card] { lib.cards(forLevel: state.level) }
+    var levelUnits: [UnitData] { lib.units(for: state.level) }
+
+    func setLevel(_ level: Int) {
+        state.level = level
+        let numbers = levelUnits.map(\.n)
+        if !numbers.contains(state.unit) { state.unit = numbers.min() ?? 1 }
+    }
+
+    func nextUnit(after n: Int) -> Int? { levelUnits.map(\.n).sorted().first { $0 > n } }
+
     func unitPct(_ n: Int) -> Double {
-        let a = lib.cards(inUnit: n)
+        let a = lib.cards(in: state.level, n)
         return a.isEmpty ? 0 : Double(a.filter(mastered).count) / Double(a.count)
     }
-    var coursePct: Double { lib.book.isEmpty ? 0 : Double(lib.book.filter(mastered).count) / Double(lib.book.count) }
-    var masteredCount: Int { lib.book.filter(mastered).count }
+    var coursePct: Double { levelBook.isEmpty ? 0 : Double(levelBook.filter(mastered).count) / Double(levelBook.count) }
+    var masteredCount: Int { levelBook.filter(mastered).count }
 
     var mineCards: [Card] { state.mine.map { Card(id: "m" + $0.id, kind: .recall, text: $0.t, meaning: Meaning(en: $0.m, ru: $0.m), isMine: true) } }
     var allItems: [Card] { lib.book + lib.society + lib.interview + lib.visa + mineCards }
 
     func pool() -> [Card] {
         // Cards come only from the unit you chose; after 90% of Level 3, everything is in review.
-        let book = coursePct >= Self.goal ? lib.book : lib.cards(inUnit: state.unit)
+        let book = coursePct >= Self.goal ? levelBook : lib.cards(in: state.level, state.unit)
         switch state.track {
         case .natz: return mineCards + lib.society + lib.interview + book.filter { $0.kind == .pron }
         case .visa: return mineCards + lib.visa + book
-        case .kiip: return mineCards + book + (state.level >= 5 ? lib.society : [])
+        case .kiip: return mineCards + book
         }
     }
 
@@ -259,24 +297,24 @@ final class Store: ObservableObject {
     // MARK: grammar & vocabulary mastery
 
     func grammarPct(_ g: GrammarPoint, unit n: Int) -> Double {
-        let a = lib.cards(for: g, inUnit: n)
+        let a = lib.cards(for: g, in: state.level, n)
         return a.isEmpty ? 1 : Double(a.filter(mastered).count) / Double(a.count)
     }
     func vocabPct(unit n: Int) -> Double {
-        let a = lib.cards(inUnit: n).filter { $0.kind == .word }
+        let a = lib.cards(in: state.level, n).filter { $0.kind == .word }
         return a.isEmpty ? 1 : Double(a.filter(mastered).count) / Double(a.count)
     }
     static let grammarGoal = 0.8
 
     /// A unit is done when 90% of its cards are mastered AND every grammar point is at least 80% mastered.
     func unitComplete(_ n: Int) -> Bool {
-        guard unitPct(n) >= Self.goal, let u = lib.unit(n) else { return false }
+        guard unitPct(n) >= Self.goal, let u = lib.unit(state.level, n) else { return false }
         return u.grammar.allSatisfy { grammarPct($0, unit: n) >= Self.grammarGoal }
     }
 
     /// The grammar point in a unit that needs the most work.
     func weakestGrammar(unit n: Int) -> GrammarPoint? {
-        lib.unit(n)?.grammar.min { grammarPct($0, unit: n) < grammarPct($1, unit: n) }
+        lib.unit(state.level, n)?.grammar.min { grammarPct($0, unit: n) < grammarPct($1, unit: n) }
     }
 
     // MARK: sessions
@@ -317,16 +355,33 @@ final class Store: ObservableObject {
 
     /// Role-play: the 말하기 dialogue in your role, then the same dialogue in the other role, then the 듣기 conversation.
     func roleplayCards(unit n: Int) -> [Card] {
-        guard let u = lib.unit(n) else { return [] }
-        let lines = lib.cards(inUnit: n).filter { $0.kind == .line }
+        guard let u = lib.unit(state.level, n) else { return [] }
+        let lines = lib.cards(in: state.level, n).filter { $0.kind == .line }
         let talk = lines.filter { $0.scene == 0 }, listen = lines.filter { $0.scene == 1 }
         return talk.filter { $0.speaker == u.me } + talk.filter { $0.speaker != u.me } + listen
     }
 
-    /// Due spaced-repetition cards from units you've already studied, so earlier units stay in memory.
+    /// Due spaced-repetition cards from earlier chapters of this level, so they stay in memory.
+    /// Order follows the book, so a skipped number (중급 2 has no unit 8) still counts as earlier.
     var dueReview: [Card] {
-        lib.book.filter { ($0.unit ?? 0) < state.unit && srs($0.id).n > 0 && isDue($0) }
+        let earlier = Set(levelUnits.map(\.n).prefix { $0 != state.unit })
+        return levelBook.filter { earlier.contains($0.unit ?? -1) && srs($0.id).n > 0 && isDue($0) }
             + (lib.society + lib.interview + lib.visa + mineCards).filter { srs($0.id).n > 0 && isDue($0) }
+    }
+
+    /// What was studied on a calendar day. Old logs stored unit numbers only, and those were level 3.
+    func studiedLabel(_ log: DayLog) -> String {
+        if !log.marks.isEmpty {
+            return log.marks.sorted().map { mark in
+                let parts = mark.split(separator: "-").compactMap { Int($0) }
+                guard parts.count == 2, let u = lib.unit(parts[0], parts[1]) else { return mark }
+                return "L\(parts[0]) · \(parts[1]) \(u.ko)"
+            }.joined(separator: " · ")
+        }
+        return log.units.sorted().map { n in
+            let title = lib.unit(3, n)?.ko ?? ""
+            return "3 · \(n) \(title)"
+        }.joined(separator: " · ")
     }
 
     func reviewCards() -> [Card] {
@@ -348,24 +403,31 @@ final class Store: ObservableObject {
         var day = state.activity[Self.dayKey(), default: DayLog()]
         day.answered += 1
         if ok { day.correct += 1 }
-        if let u = c.unit, !day.units.contains(u) { day.units.append(u) }
+        if let u = c.unit {
+            if !day.units.contains(u) { day.units.append(u) }
+            let mark = "\(c.level)-\(u)"
+            if !day.marks.contains(mark) { day.marks.append(mark) }
+        }
         state.activity[Self.dayKey()] = day
         var notes: [String] = []
-        if !practice && state.track == .kiip && state.unit < 16 && unitComplete(state.unit) {
-            state.unit += 1
-            notes.append(L.s("Unit \(state.unit - 1) complete: 90% mastered with every grammar point learned. Unit \(state.unit) is open.",
-                             "Урок \(state.unit - 1) пройден: 90% и вся грамматика освоена. Открыт урок \(state.unit)."))
+        if !practice && state.track == .kiip && unitComplete(state.unit), let next = nextUnit(after: state.unit) {
+            let finished = state.unit
+            state.unit = next
+            notes.append(L.s("Unit \(finished) complete: 90% mastered with every grammar point learned. Unit \(next) is open.",
+                             "Урок \(finished) пройден: 90% и вся грамматика освоена. Открыт урок \(next)."))
         }
-        if !state.l3done && coursePct >= Self.goal {
-            state.l3done = true
-            notes.append(L.s("Level 3 is 90% mastered. 축하해요!", "Уровень 3 освоен на 90%. 축하해요!"))
+        if coursePct >= Self.goal && !state.doneLevels.contains(state.level) {
+            state.doneLevels.append(state.level)
+            if state.level == 3 { state.l3done = true }
+            let name = Levels.ko(state.level)
+            notes.append(L.s("\(name) is 90% mastered. 축하해요!", "\(name) освоен на 90%. 축하해요!"))
         }
         return notes
     }
 
     var goalText: String {
         switch state.track {
-        case .kiip: return "KIIP \(state.level)" + (state.level == 3 ? L.s(" · Unit \(state.unit)", " · Урок \(state.unit)") : "")
+        case .kiip: return "KIIP \(state.level) · \(Levels.ko(state.level))" + L.s(" · Unit \(state.unit)", " · Урок \(state.unit)")
         default: return state.track.title
         }
     }

@@ -13,28 +13,38 @@ struct SetupView: View {
             AuroraBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    if isEdit { Button { dismiss() } label: { Image(systemName: "xmark").font(.title3.weight(.semibold)).foregroundStyle(Color.muted) } }
+                    if isEdit {
+                        Button { dismiss() } label: { Image(systemName: "xmark").font(.title3.weight(.semibold)).foregroundStyle(Color.muted) }
+                            .accessibilityLabel(t("Close", "Закрыть"))
+                    }
                     step(1); Text(draft.lang == .ru ? "Ваш родной язык?" : "What's your native language?").font(.title.weight(.heavy))
                     HStack(spacing: 10) {
                         choice("English", "Meanings & feedback in English", draft.lang == .en) { draft.lang = .en }
                         choice("Русский", "Значения и разбор по-русски", draft.lang == .ru) { draft.lang = .ru }
                     }
-                    step(2); Text(t("What are you working toward in Korea?", "К чему вы готовитесь в Корее?")).font(.title.weight(.heavy))
+                    step(2)
+                    Text(t("What are you working toward in Korea?", "К чему вы готовитесь в Корее?")).font(.title.weight(.heavy))
                     ForEach(Track.allCases, id: \.self) { tr in
                         choice(tr.title, tr.detail, draft.track == tr) { draft.track = tr }
                     }
-                    Text(t("KIIP level you're studying", "Уровень KIIP, который вы изучаете")).font(.headline)
-                    Picker("", selection: $draft.level) { ForEach(0...5, id: \.self) { Text("\($0)").tag($0) } }.pickerStyle(.segmented)
-                    if draft.level != 3 {
-                        Text(t("Lessons in this version are the Level 3 book (중급 1). Other levels are saved on your goal, but their textbooks are not bundled yet.",
-                               "Уроки в этой версии — учебник 3-го уровня (중급 1). Другой уровень сохранится в цели, но его учебника в приложении пока нет."))
+                    Text(t("KIIP level", "Уровень KIIP")).font(.headline)
+                    Picker(t("KIIP level", "Уровень KIIP"), selection: $draft.level) {
+                        ForEach(Levels.all, id: \.self) { lv in
+                            Text(Levels.line(lv, draft.lang)).tag(lv)
+                        }
+                    }
+                    .pickerStyle(.menu).labelsHidden()
+                    Text(t("Current unit", "Текущий урок")).font(.headline)
+                    Picker(t("Current unit", "Текущий урок"), selection: $draft.unit) {
+                        ForEach(store.lib.units(for: draft.level)) { u in
+                            Text("\(u.n) · \(u.ko) · \(draft.lang == .ru ? u.ru : u.en)").tag(u.n)
+                        }
+                    }
+                    .pickerStyle(.menu).labelsHidden().frame(maxWidth: .infinity, alignment: .leading).padding(8).glass(14)
+                    if store.lib.units(for: draft.level).isEmpty {
+                        Text(t("This level has no lessons yet.", "На этом уровне пока нет уроков."))
                             .font(.footnote).foregroundStyle(Color.muted)
                     }
-                    Text(t("Which Level 3 unit are you on?", "Какой урок 3-го уровня проходите?")).font(.headline)
-                    Picker("", selection: $draft.unit) {
-                        ForEach(store.lib.units) { u in Text("\(u.n) · \(u.ko) · \(draft.lang == .ru ? u.ru : u.en)").tag(u.n) }
-                    }
-                    .pickerStyle(.menu).tint(.ink).frame(maxWidth: .infinity, alignment: .leading).padding(8).glass(14)
                     Toggle(t("I have an exam, interview or visa date", "У меня есть дата экзамена, собеседования или визы"), isOn: $hasDate).tint(.accent)
                     if hasDate { DatePicker("", selection: $date, displayedComponents: .date).datePickerStyle(.compact).labelsHidden() }
                     step(3); Text(t("How hard should unlocking be?", "Насколько сложной должна быть разблокировка?")).font(.title.weight(.heavy))
@@ -46,6 +56,7 @@ struct SetupView: View {
                         s.lang = draft.lang; s.track = draft.track; s.level = draft.level; s.unit = draft.unit
                         s.intensity = draft.intensity; s.date = hasDate ? date : nil; s.setupDone = true
                         store.state = s
+                        store.setLevel(draft.level)
                         dismiss()
                     }
                     .buttonStyle(PrimaryButton()).padding(.top, 8)
@@ -57,7 +68,14 @@ struct SetupView: View {
         .onAppear {
             draft = store.state
             if let d = store.state.date { hasDate = true; date = d }
+            clampUnit()
         }
+        .onChange(of: draft.level) { _, _ in clampUnit() }
+    }
+
+    func clampUnit() {
+        let numbers = store.lib.units(for: draft.level).map(\.n)
+        if !numbers.contains(draft.unit) { draft.unit = numbers.min() ?? 1 }
     }
 
     func t(_ en: String, _ ru: String) -> String { draft.lang == .ru ? ru : en }

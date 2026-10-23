@@ -60,11 +60,13 @@ struct CalendarView: View {
         let ordered = Array(symbols[(cal.firstWeekday - 1)...] + symbols[..<(cal.firstWeekday - 1)])
         return VStack(spacing: 12) {
             HStack {
-                Button { month = cal.date(byAdding: .month, value: -1, to: month)! } label: { Image(systemName: "chevron.left") }
+                Button { if let prev = cal.date(byAdding: .month, value: -1, to: month) { month = prev } } label: { Image(systemName: "chevron.left") }
+                    .accessibilityLabel(L.s("Previous month", "Предыдущий месяц"))
                 Spacer()
                 Text(month.formatted(.dateTime.year().month(.wide))).font(.headline)
                 Spacer()
-                Button { month = cal.date(byAdding: .month, value: 1, to: month)! } label: { Image(systemName: "chevron.right") }
+                Button { if let next = cal.date(byAdding: .month, value: 1, to: month) { month = next } } label: { Image(systemName: "chevron.right") }
+                    .accessibilityLabel(L.s("Next month", "Следующий месяц"))
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7), spacing: 6) {
                 ForEach(Array(ordered.enumerated()), id: \.offset) { _, s in Text(s).font(.caption2).foregroundStyle(Color.muted) }
@@ -105,8 +107,8 @@ struct CalendarView: View {
                 Text(L.s("No practice this day.", "В этот день занятий не было.")).foregroundStyle(Color.muted)
             } else {
                 Text(L.s("\(log.correct) of \(log.answered) cards right · \(log.unlocks) unlock(s)", "Верно \(log.correct) из \(log.answered) · разблокировок: \(log.unlocks)"))
-                if !log.units.isEmpty {
-                    Text(L.s("Units: ", "Уроки: ") + log.units.sorted().map { "\($0) \(store.lib.unit($0)?.ko ?? "")" }.joined(separator: " · "))
+                if !log.marks.isEmpty || !log.units.isEmpty {
+                    Text(L.s("Units: ", "Уроки: ") + store.studiedLabel(log))
                         .font(.footnote).foregroundStyle(Color.muted)
                 }
             }
@@ -149,7 +151,7 @@ struct ProfileView: View {
                         Text(L.s("For natural Korean: Settings › Accessibility › Spoken Content › Voices › Korean › Yuna (Premium).",
                                  "Для естественного корейского: Настройки › Универсальный доступ › Устный контент › Голоса › Корейский › Yuna (улучшенный)."))
                             .font(.footnote).foregroundStyle(Color.muted)
-                        Button(L.s("Test voice", "Проверить голос")) { Speaker.shared.say("안녕하세요. 사회통합프로그램 중급 1 과정에 오신 것을 환영합니다.") }.buttonStyle(GlassButton())
+                        Button(L.s("Test voice", "Проверить голос")) { Speaker.shared.say("안녕하세요. 오늘도 한국어를 공부해 봐요.") }.buttonStyle(GlassButton())
                     }
                     section(L.s("Blocking", "Блокировка")) {
                         Label(store.state.screenTimeReady ? L.s("Screen Time blocking is on", "Блокировка Экранным временем включена") : L.s("Not set up yet", "Ещё не настроена"),
@@ -181,8 +183,8 @@ struct ProfileView: View {
             HStack(spacing: 18) {
                 Ring(value: store.coursePct, label: "\(Int(store.coursePct * 100))%")
                 VStack(alignment: .leading, spacing: 4) {
-                    Eyebrow(text: L.s("Level 3 course · goal 90%", "Курс уровня 3 · цель 90%"))
-                    Text(L.s("\(store.masteredCount) of \(store.lib.book.count) cards mastered", "Освоено \(store.masteredCount) из \(store.lib.book.count)")).font(.headline)
+                    Eyebrow(text: L.s("\(Levels.ko(store.state.level)) · goal 90%", "\(Levels.ko(store.state.level)) · цель 90%"))
+                    Text(L.s("\(store.masteredCount) of \(store.levelBook.count) cards mastered", "Освоено \(store.masteredCount) из \(store.levelBook.count)")).font(.headline)
                     Text(L.s("Unit \(store.state.unit) · \(store.state.xp) xp · \(store.state.streak)-day streak", "Урок \(store.state.unit) · \(store.state.xp) xp · \(store.state.streak) дн. подряд"))
                         .font(.footnote).foregroundStyle(Color.muted)
                 }
@@ -196,14 +198,18 @@ struct ProfileView: View {
                 tile("\(store.state.tutorOk)/\(store.state.tutorQ)", L.s("Tutor answers right", "Верно репетитору"), .info)
             }
             VStack(alignment: .leading, spacing: 8) {
-                Eyebrow(text: L.s("Units", "Уроки"))
-                ForEach(store.lib.units) { u in
+                Eyebrow(text: L.s("Units · \(Levels.ko(store.state.level))", "Уроки · \(Levels.ko(store.state.level))"))
+                if store.levelUnits.isEmpty {
+                    Text(L.s("No lessons for this level yet.", "Для этого уровня уроков пока нет.")).font(.footnote).foregroundStyle(Color.muted)
+                }
+                ForEach(store.levelUnits) { u in
                     HStack(spacing: 8) {
-                        Text("\(u.n)").font(.caption.monospaced()).foregroundStyle(Color.muted).frame(width: 20, alignment: .trailing)
-                        Text(u.ko).font(.caption).frame(width: 96, alignment: .leading).lineLimit(1)
+                        Text("\(u.n)").font(.caption.monospaced()).foregroundStyle(Color.muted).frame(width: 22, alignment: .trailing)
+                        Text(u.ko).font(.caption).frame(maxWidth: 120, alignment: .leading).lineLimit(2).minimumScaleFactor(0.8)
                         ProgressView(value: store.unitPct(u.n)).tint(store.unitPct(u.n) >= Store.goal ? .good : .info)
                         Text("\(Int(store.unitPct(u.n) * 100))%").font(.caption2.monospaced()).foregroundStyle(Color.muted).frame(width: 34, alignment: .trailing)
                     }
+                    .accessibilityElement(children: .combine)
                 }
             }
             .padding(16).glass()

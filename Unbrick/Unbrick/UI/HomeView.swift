@@ -15,6 +15,8 @@ enum Sheet: Identifiable {
 struct HomeView: View {
     @EnvironmentObject var store: Store
     @State private var editingApps = false
+    @ScaledMetric(relativeTo: .largeTitle) private var timerSize: CGFloat = 44
+    @ScaledMetric(relativeTo: .title) private var codeSize: CGFloat = 32
 
     var body: some View {
         ZStack {
@@ -22,8 +24,8 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     header
-                    lockCard
-                    currentUnitCard
+                    continueCard
+                    statusCard
                     if !store.dueReview.isEmpty { reviewCard }
                     weekStrip
                     goalCard
@@ -55,15 +57,57 @@ struct HomeView: View {
 
     // MARK: lock
 
-    var lockCard: some View {
+    var continueCard: some View {
+        let n = store.state.unit
+        let u = store.lib.unit(store.state.level, n)
+        let p = store.unitPct(n)
+        return VStack(alignment: .leading, spacing: 14) {
+            Eyebrow(text: store.goalText)
+            Text(L.s("Continue", "Продолжить")).font(.largeTitle.weight(.heavy))
+            if let u {
+                Text(L.s("Unit \(n)", "Урок \(n)") + " · " + u.ko).font(.title3.weight(.semibold)).lineLimit(3)
+                Text(u.title.text(store.state.lang)).font(.subheadline).foregroundStyle(Color.muted).lineLimit(3)
+            } else {
+                Text(L.s("This level has no lesson \(n). Choose another level on Learn.", "На этом уровне нет урока \(n). Выберите другой уровень в разделе Учёба."))
+                    .foregroundStyle(Color.muted)
+            }
+            ProgressView(value: p).tint(p >= Store.goal ? .good : .info)
+            Text(nextLine(n)).font(.caption).foregroundStyle(Color.muted)
+            Button(L.s("Continue", "Продолжить")) { store.launch = .quiz(.cards) }
+                .buttonStyle(PrimaryButton())
+                .disabled(u == nil || store.lib.cards(in: store.state.level, n).isEmpty)
+                .accessibilityHint(L.s("Starts cards for this unit", "Карточки этого урока"))
+            HStack(spacing: 8) {
+                Button(L.s("Role-play", "Диалог")) { store.launch = .quiz(.role(n)) }
+                    .buttonStyle(GlassButton())
+                    .disabled(u == nil)
+                Button(L.s("AI tutor", "Репетитор")) { store.launch = .tutor }.buttonStyle(GlassButton())
+            }
+            Button(L.s("Open unit", "Открыть урок")) { store.tab = .learn }.buttonStyle(GlassButton())
+        }
+        .padding(22).glass()
+    }
+
+    func nextLine(_ n: Int) -> String {
+        if let next = store.nextUnit(after: n) {
+            return L.s("90% mastered, with every grammar point learned, opens unit \(next). Cards and role-play use this unit.",
+                       "90% и вся грамматика открывают урок \(next). Карточки и диалог — из этого урока.")
+        }
+        return L.s("90% mastered finishes this level. Cards and role-play use this unit.",
+                   "90% завершает этот уровень. Карточки и диалог — из этого урока.")
+    }
+
+    var statusCard: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 14) {
                 let blocked = store.state.apps.filter(\.blocked).count
                 if store.unlocked {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 4) {
                             Eyebrow(text: L.s("Unlocked for", "Открыто ещё"))
-                            Text(timeString(store.remaining)).font(.system(size: 46, weight: .bold, design: .monospaced)).foregroundStyle(Color.good)
+                            Text(timeString(store.remaining)).font(.system(size: timerSize, weight: .bold, design: .monospaced)).foregroundStyle(Color.good)
+                                .lineLimit(1).minimumScaleFactor(0.5)
+                                .accessibilityLabel(L.s("Unlocked for \(Int(store.remaining / 60)) minutes", "Открыто ещё \(Int(store.remaining / 60)) минут"))
                         }
                         Spacer()
                         orb(open: true)
@@ -71,36 +115,27 @@ struct HomeView: View {
                     if store.state.screenTimeReady, let code = ScreenTimeCode.value {
                         VStack(alignment: .leading, spacing: 6) {
                             Eyebrow(text: L.s("Screen Time passcode", "Код-пароль Экранного времени"))
-                            Text(code).font(.system(size: 40, weight: .heavy, design: .monospaced)).kerning(10)
+                            Text(code).font(.system(size: codeSize, weight: .heavy, design: .monospaced)).lineLimit(1).minimumScaleFactor(0.5)
+                                .accessibilityLabel(L.s("Passcode \(code)", "Код \(code)"))
                             Text(L.s("In the blocked app: Ask for More Time › Enter Screen Time Passcode › Approve for 15 Minutes.",
                                      "В заблокированном приложении: «Попросить больше времени» › «Ввести код-пароль» › «Одобрить на 15 минут»."))
                                 .font(.footnote).foregroundStyle(Color.muted)
                         }
                         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.good.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
-                    } else {
-                        Text(store.state.screenTimeReady
-                             ? L.s("Screen Time passcode is hidden until you earn an unlock. These tiles are practice shortcuts.", "Код Экранного времени скрыт, пока вы не заработаете разблокировку. Эти значки — только тренировка.")
-                             : L.s("\(blocked) practice shortcuts. They brick again at zero. They do not close other apps.", "Тренировочных ярлыков: \(blocked). При нуле снова щит. Другие приложения сами не закрываются."))
-                            .foregroundStyle(Color.muted)
                     }
                     Button(L.s("Lock now", "Заблокировать")) { store.relock() }.buttonStyle(GlassButton())
                 } else {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(L.s("Time to practice", "Время заниматься")).font(.system(size: 34, weight: .heavy))
+                            Text(L.s("Practice unlocks your apps", "Занятие открывает приложения")).font(.title2.weight(.bold))
                             Text(store.state.screenTimeReady
-                                 ? L.s("Screen Time is on · \(store.state.intensity.minutes) min per unlock", "Экранное время включено · \(store.state.intensity.minutes) мин за раз")
-                                 : L.s("Practice shield · Screen Time is not set up yet", "Тренировочный щит · Экранное время ещё не настроено"))
+                                 ? L.s("Screen Time is on · \(store.state.intensity.minutes) min per unlock. Continue above to start the timer.", "Экранное время включено · \(store.state.intensity.minutes) мин за раз. Нажмите «Продолжить» выше, чтобы запустить таймер.")
+                                 : L.s("\(blocked) practice shortcuts. Continue above to run the timer. Real blocking is Screen Time, further down.", "Тренировочных ярлыков: \(blocked). «Продолжить» выше запускает таймер. Настоящая блокировка — Экранное время ниже."))
                                 .font(.subheadline).foregroundStyle(Color.muted)
                         }
                         Spacer()
                         orb(open: false)
-                    }
-                    HStack(spacing: 8) {
-                        Button(L.s("Cards", "Карточки")) { store.launch = .quiz(.cards) }.buttonStyle(PrimaryButton())
-                        Button(L.s("Role-play", "Диалог")) { store.launch = .quiz(.role(store.state.unit)) }.buttonStyle(GlassButton())
-                        Button(L.s("AI tutor", "Репетитор")) { store.launch = .tutor }.buttonStyle(GlassButton())
                     }
                 }
             }
@@ -116,35 +151,6 @@ struct HomeView: View {
     }
 
     func timeString(_ t: TimeInterval) -> String { String(format: "%02d:%02d", Int(t) / 60, Int(t) % 60) }
-
-    // MARK: current unit
-
-    var currentUnitCard: some View {
-        let n = store.state.unit, p = store.unitPct(n)
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Eyebrow(text: L.s("Studying now · Unit \(n)", "Сейчас · урок \(n)"))
-                    if let u = store.lib.unit(n) {
-                        Text(u.ko).font(.title2.weight(.bold))
-                        Text(u.title.text(store.state.lang) + " · " + u.grammar.map(\.name).joined(separator: " · ")).font(.footnote).foregroundStyle(Color.muted)
-                    }
-                }
-                Spacer()
-                Ring(value: p, label: "\(Int(p * 100))%", size: 64)
-            }
-            ProgressView(value: p).tint(p >= Store.goal ? .good : .info)
-            Text(L.s("90% mastered opens Unit \(min(n + 1, 16)). Cards and role-play use only this unit.", "90% открывает урок \(min(n + 1, 16)). Карточки и диалог — только из этого урока."))
-                .font(.caption).foregroundStyle(Color.muted)
-            HStack(spacing: 8) {
-                Button(L.s("Open unit", "Открыть урок")) { store.tab = .learn }.buttonStyle(GlassButton())
-                Button(L.s("Practice", "Тренировать")) { store.launch = .quiz(.cards) }.buttonStyle(PrimaryButton())
-            }
-        }
-        .padding(18).glass()
-    }
-
-    // MARK: daily review
 
     var reviewCard: some View {
         let due = store.dueReview.count
@@ -186,6 +192,7 @@ struct HomeView: View {
             .padding(16).glass()
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(L.s("This week. Open calendar.", "Эта неделя. Открыть календарь."))
     }
 
     // MARK: goal
@@ -234,10 +241,13 @@ struct HomeView: View {
                                 if a.blocked { Image(systemName: "lock.fill").font(.system(size: 10)).foregroundStyle(.white).padding(5).background(Circle().fill(Color.accent)).offset(x: 5, y: 5) }
                             }
                             .overlay(editingApps ? RoundedRectangle(cornerRadius: 15).strokeBorder(Color.hair, style: StrokeStyle(lineWidth: 2, dash: [5])).padding(-4) : nil)
-                            Text(a.name).font(.caption).foregroundStyle(Color.muted).lineLimit(1)
+                            Text(a.name).font(.caption).foregroundStyle(Color.muted).lineLimit(2).minimumScaleFactor(0.8)
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(a.blocked
+                        ? L.s("\(a.name), practice shield", "\(a.name), тренировочный щит")
+                        : L.s("\(a.name), not blocked", "\(a.name), не заблокирован"))
                 }
             }
             .padding(16).glass()
@@ -302,6 +312,7 @@ struct MineSection: View {
                         Spacer()
                         IconButton(system: "speaker.wave.2.fill", size: 34) { Speaker.shared.say(c.t) }
                         Button { store.state.mine.removeAll { $0.id == c.id } } label: { Image(systemName: "xmark").foregroundStyle(Color.muted) }
+                            .accessibilityLabel(L.s("Delete card", "Удалить карточку"))
                     }
                     .padding(.vertical, 4)
                 }
@@ -312,8 +323,9 @@ struct MineSection: View {
 
     func generate() {
         busy = true
-        let lang = store.state.lang == .ru ? "Russian" : "English", u = store.lib.unit(store.state.unit)
-        let system = "You write Korean speaking flashcards for a learner (native language \(lang); goal: \(store.goalText); studying KIIP 중급 1 unit \(u?.n ?? 3) \"\(u?.ko ?? "")\" with grammar \(u?.grammar.map(\.name).joined(separator: ", ") ?? "")). Sentences they would really SAY in Korea, polite style, under 14 words, using the unit's grammar where natural. Facts about Korea must be accurate. m is the \(lang) meaning."
+        let lang = store.state.lang == .ru ? "Russian" : "English", u = store.lib.unit(store.state.level, store.state.unit)
+        let stage = "KIIP \(store.state.level) \(Levels.ko(store.state.level))"
+        let system = "You write Korean speaking flashcards for a learner (native language \(lang); goal: \(store.goalText); studying \(stage) unit \(u?.n ?? store.state.unit) \"\(u?.ko ?? "")\" with grammar \(u?.grammar.map(\.name).joined(separator: ", ") ?? "")). Sentences they would really SAY in Korea, polite style, under 14 words, using the unit's grammar where natural. Facts about Korea must be accurate. m is the \(lang) meaning."
         Task { @MainActor in
             do {
                 let cards = try await AI.cards(system: system, prompt: "Write 8 cards about: \(topic.prefix(120))")

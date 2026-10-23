@@ -65,8 +65,10 @@ struct BlockingGuideView: View {
                     L.s("Set the time to 1 minute, make sure Block at End of Limit is ON, then tap Add.", "Поставьте 1 минуту, включите «Блокировать в конце лимита» и нажмите «Добавить»."),
                     L.s("Optional, stronger: Screen Time › Content & Privacy Restrictions › turn on, so Screen Time can't be switched off without the passcode.", "Для надёжности: Экранное время › Контент и конфиденциальность › включите, чтобы его нельзя было выключить без кода.")
                 ])
-                Link(destination: URL(string: UIApplication.openSettingsURLString)!) { Label(L.s("Open Settings", "Открыть Настройки"), systemImage: "gear") }
-                    .buttonStyle(GlassButton())
+                if let settings = URL(string: UIApplication.openSettingsURLString) {
+                    Link(destination: settings) { Label(L.s("Open Settings", "Открыть Настройки"), systemImage: "gear") }
+                        .buttonStyle(GlassButton())
+                }
                 Button(L.s("I've set the passcode and App Limits", "Код и лимиты настроены")) {
                     store.state.screenTimeReady = true
                     store.flash(L.s("Real blocking is on. The passcode is hidden until you earn an unlock.", "Блокировка включена. Код скрыт до следующей разблокировки."))

@@ -14,7 +14,7 @@ struct ReviewView: View {
     struct Group: Identifiable { let id: String; let title: String; let sub: String; let items: [Card] }
 
     var groups: [Group] {
-        store.lib.units.map { u in Group(id: "u\(u.n)", title: L.s("Unit \(u.n)", "Урок \(u.n)") + " · " + u.ko, sub: u.title.text(store.state.lang), items: store.lib.cards(inUnit: u.n)) }
+        store.levelUnits.map { u in Group(id: u.id, title: L.s("Unit \(u.n)", "Урок \(u.n)") + " · " + u.ko, sub: u.title.text(store.state.lang), items: store.lib.cards(in: u.lv, u.n)) }
         + [Group(id: "natz", title: L.s("Naturalization · 종합평가 & 면접", "Натурализация · 종합평가 и 면접"), sub: "", items: store.lib.society + store.lib.interview),
            Group(id: "visa", title: L.s("Immigration office · 출입국", "Иммиграционная служба · 출입국"), sub: "", items: store.lib.visa),
            Group(id: "mine", title: L.s("My cards", "Мои карточки"), sub: "", items: store.mineCards)].filter { !$0.items.isEmpty }
@@ -33,9 +33,11 @@ struct ReviewView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Button { dismiss() } label: { Image(systemName: "xmark").font(.title3.weight(.semibold)).foregroundStyle(Color.muted) }
+                            .accessibilityLabel(L.s("Close", "Закрыть"))
                         Text(L.s("Review", "Повторение")).font(.largeTitle.weight(.heavy))
                     }
                     .padding(.top, 8)
+                    Text(Levels.line(store.state.level, store.state.lang)).font(.subheadline).foregroundStyle(Color.muted)
                     stats
                     Picker("", selection: $tab) {
                         Text(L.s("All", "Все")).tag(0); Text(L.s("Learned", "Изученные")).tag(1); Text(L.s("Needs work", "Слабые")).tag(2)
@@ -98,7 +100,7 @@ struct ReviewView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text(g.title).font(.headline).foregroundStyle(Color.ink)
-                            if !g.sub.isEmpty { Text(g.sub).font(.footnote).foregroundStyle(Color.muted).lineLimit(1) }
+                            if !g.sub.isEmpty { Text(g.sub).font(.footnote).foregroundStyle(Color.muted).lineLimit(2) }
                             Spacer()
                             Text("\(m)/\(g.items.count)" + (n > 0 ? " · \(ok * 100 / n)%" : "")).font(.caption.monospaced()).foregroundStyle(Color.muted)
                             Image(systemName: open == g.id ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(Color.muted)

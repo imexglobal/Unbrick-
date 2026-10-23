@@ -4,6 +4,7 @@ import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -80,15 +82,17 @@ fun UnbrickApp(lessons: List<StudyUnit>) {
 
 @Composable
 private fun LessonsScreen(lessons: List<StudyUnit>, russian: Boolean) {
-    var open by remember { mutableIntStateOf(0) }
-    if (open != 0) {
-        val unit = lessons.firstOrNull { it.n == open }
+    var open by remember { mutableStateOf("") }
+    val levels = lessons.map { it.level }.distinct().sorted()
+    var level by remember(levels) { mutableIntStateOf(levels.firstOrNull { it == 3 } ?: levels.firstOrNull() ?: 0) }
+    if (open.isNotEmpty()) {
+        val unit = lessons.firstOrNull { it.id == open }
         Column(Modifier.fillMaxSize()) {
-            Button(onClick = { open = 0 }) { Text("All units") }
+            Button(onClick = { open = "" }) { Text("All units") }
             if (unit == null) {
                 Text("That unit is not in the shared lessons file.", color = Muted)
             } else {
-                Text("Unit ${unit.n} · ${unit.ko}", color = Ink, style = MaterialTheme.typography.titleLarge)
+                Text("L${unit.level} · ${unit.n}. ${unit.ko}", color = Ink, style = MaterialTheme.typography.titleLarge)
                 Text(if (russian) unit.ru else unit.en, color = Muted)
                 Text("Vocabulary", color = Ink, modifier = Modifier.padding(top = 12.dp))
                 LazyColumn(Modifier.weight(1f)) {
@@ -110,10 +114,22 @@ private fun LessonsScreen(lessons: List<StudyUnit>, russian: Boolean) {
         Text("Lessons didn't load. The shared Content.json is copied in at build time.", color = Muted, modifier = Modifier.padding(top = 12.dp))
         return
     }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
-        items(lessons) { unit ->
-            Button(onClick = { open = unit.n }, modifier = Modifier.fillMaxWidth()) {
-                Text("${unit.n}. ${unit.ko} · ${if (russian) unit.ru else unit.en}")
+    Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            levels.forEach { lv ->
+                FilterChip(selected = level == lv, onClick = { level = lv }, label = { Text("L$lv") })
+            }
+        }
+        val shown = lessons.filter { it.level == level }
+        if (shown.isEmpty()) {
+            Text("No lessons for this level.", color = Muted, modifier = Modifier.padding(top = 12.dp))
+            return
+        }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
+            items(shown, key = { it.id }) { unit ->
+                Button(onClick = { open = unit.id }, modifier = Modifier.fillMaxWidth()) {
+                    Text("L${unit.level} · ${unit.n}. ${unit.ko} · ${if (russian) unit.ru else unit.en}")
+                }
             }
         }
     }
@@ -208,9 +224,9 @@ private fun recognizerIntent() = android.content.Intent(RecognizerIntent.ACTION_
 
 private fun systemPrompt(lessons: List<StudyUnit>, russian: Boolean): String {
     val lang = if (russian) "Russian" else "English"
-    val unit = lessons.firstOrNull()
-    val title = unit?.let { "Current book starts at unit ${it.n} ${it.ko}." } ?: ""
-    return "You are a Korean tutor. The learner's native language is $lang. $title Ask one short question in Korean and give feedback in $lang."
+    val covered = lessons.map { it.level }.distinct().sorted().joinToString(", ")
+    val scope = if (covered.isBlank()) "KIIP levels 0 through 5." else "Loaded lessons cover KIIP levels $covered."
+    return "You are a Korean tutor. The learner's native language is $lang. $scope Ask one short question in Korean and give feedback in $lang."
 }
 
 private fun JSONObjectLite(verdict: String, question: String) =
