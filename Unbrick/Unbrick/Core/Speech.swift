@@ -73,11 +73,11 @@ final class Recognizer: ObservableObject {
         return speech && mic
     }
 
-    func start(onFinish: @escaping ([String]) -> Void) throws {
+    func start(onFinish callback: @escaping ([String]) -> Void) throws {
         generation += 1
         let gen = generation
         stopEngine()
-        self.onFinish = onFinish
+        onFinish = callback
         finished = false
         transcript = ""
         alternatives = []
@@ -112,6 +112,7 @@ final class Recognizer: ObservableObject {
         do {
             try engine.start()
         } catch {
+            onFinish = nil
             stopEngine()
             throw error
         }
