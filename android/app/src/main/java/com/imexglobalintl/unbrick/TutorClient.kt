@@ -1,13 +1,35 @@
 package com.imexglobalintl.unbrick
 
+import android.content.Context
+import android.provider.Settings
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.UUID
 
 data class TutorReply(val feedback: String, val question: String, val gloss: String, val verdict: String)
 
-class TutorClient(private val base: String, private val token: String) {
+object DeviceId {
+    private val pattern = Regex("^[A-Za-z0-9_-]{8,80}$")
+    private const val badEmulatorId = "9774d56d682e549c"
+
+    fun get(context: Context): String {
+        val prefs = context.getSharedPreferences("unbrick.device", Context.MODE_PRIVATE)
+        val existing = prefs.getString("id", null)
+        if (existing != null && existing.matches(pattern)) return existing
+        val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+        val id = if (androidId != null && androidId != badEmulatorId && androidId.matches(pattern)) {
+            androidId
+        } else {
+            UUID.randomUUID().toString()
+        }
+        prefs.edit().putString("id", id).apply()
+        return id
+    }
+}
+
+class TutorClient(private val base: String, private val token: String, private val device: String) {
     val configured: Boolean get() = base.startsWith("https://") && token.isNotEmpty()
 
     fun tutor(system: String, turns: List<Pair<String, String>>): TutorReply {
@@ -28,6 +50,7 @@ class TutorClient(private val base: String, private val token: String) {
             doOutput = true
             setRequestProperty("content-type", "application/json")
             setRequestProperty("X-Unbrick-Token", token)
+            setRequestProperty("X-Unbrick-Device", device)
         }
         conn.outputStream.use { it.write(body.toString().toByteArray()) }
         val code = conn.responseCode

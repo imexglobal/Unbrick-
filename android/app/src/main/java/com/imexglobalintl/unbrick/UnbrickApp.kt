@@ -122,7 +122,7 @@ private fun LessonsScreen(lessons: List<StudyUnit>, russian: Boolean) {
 @Composable
 private fun TutorScreen(lessons: List<StudyUnit>, russian: Boolean) {
     val context = LocalContext.current
-    val client = remember { TutorClient(BuildConfig.API_BASE, BuildConfig.APP_TOKEN) }
+    val client = remember(context) { TutorClient(BuildConfig.API_BASE, BuildConfig.APP_TOKEN, DeviceId.get(context)) }
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -148,7 +148,7 @@ private fun TutorScreen(lessons: List<StudyUnit>, russian: Boolean) {
         reply.onSuccess { r ->
             lines = listOf(listOf(r.feedback, r.question, r.gloss).filter { it.isNotBlank() }.joinToString("\n"))
             turns = opening + ("assistant" to JSONObjectLite(r.verdict, r.question))
-        }.onFailure { err -> lines = listOf("Error: ${err.message}") }
+        }.onFailure { err -> lines = listOf(tutorFailureLine(err.message)) }
         busy = false
     }
 
@@ -186,7 +186,7 @@ private fun TutorScreen(lessons: List<StudyUnit>, russian: Boolean) {
                             turns = nextTurns + ("assistant" to JSONObjectLite(r.verdict, r.question))
                             if (r.question.isNotBlank()) tts.speak(r.question, TextToSpeech.QUEUE_FLUSH, null, "q")
                         }.onFailure { err ->
-                            lines = lines + "Error: ${err.message}"
+                            lines = lines + tutorFailureLine(err.message)
                         }
                         busy = false
                     }
@@ -194,6 +194,11 @@ private fun TutorScreen(lessons: List<StudyUnit>, russian: Boolean) {
             ) { Text(if (busy) "…" else "Send") }
         }
     }
+}
+
+private fun tutorFailureLine(message: String?): String {
+    val text = message?.takeIf { it.isNotBlank() } ?: "Tutor failed."
+    return if (text.startsWith("AI tutor is resting")) text else "Error: $text"
 }
 
 private fun recognizerIntent() = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {

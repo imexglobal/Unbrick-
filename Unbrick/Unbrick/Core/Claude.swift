@@ -33,6 +33,46 @@ enum ScreenTimeCode {
     }
 }
 
+/// Stable id for the per-device daily cap. A Keychain UUID, not the vendor id.
+enum DeviceId {
+    private static let service = "com.imexglobalintl.unbrick.device"
+    private static var cached: String?
+
+    static var value: String {
+        if let cached, valid(cached) { return cached }
+        if let existing = read(), valid(existing) {
+            cached = existing
+            return existing
+        }
+        let fresh = UUID().uuidString
+        write(fresh)
+        cached = fresh
+        return fresh
+    }
+
+    private static func valid(_ value: String) -> Bool {
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")
+        return (8...80).contains(value.count) && value.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+
+    private static func read() -> String? {
+        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
+        var out: AnyObject?
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func write(_ value: String) {
+        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
+        SecItemDelete(base as CFDictionary)
+        var add = base
+        add[kSecValueData as String] = Data(value.utf8)
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(add as CFDictionary, nil)
+    }
+}
+
 /// Where this build sends tutor and grading requests. The Anthropic key lives only on that server.
 enum ProxyConfig {
     static var baseURL: URL? {
@@ -75,13 +115,14 @@ enum LegacyKeychainCleanup {
 }
 
 enum ClaudeError: LocalizedError {
-    case notConfigured, rateLimited, refused, offline, server(Int, String), badReply
+    case notConfigured, rateLimited, resting, refused, offline, server(Int, String), badReply
     var errorDescription: String? {
         switch self {
         case .notConfigured:
             return L.s("Claude isn't available on this build yet. Turn on Apple Intelligence for on-device checking, or ship the app with the Unbrick server URL.",
                        "Claude в этой сборке ещё не подключён. Включите Apple Intelligence для проверки на устройстве или укажите адрес сервера Unbrick.")
         case .rateLimited: return L.s("Too many requests. Wait a minute, then try again.", "Слишком много запросов. Подождите минуту.")
+        case .resting: return L.s("AI tutor is resting, try again tomorrow", "ИИ-репетитор отдыхает. Попробуйте завтра.")
         case .refused: return L.s("Claude declined this one. Try a different answer.", "Claude отказался отвечать. Попробуйте другой ответ.")
         case .offline: return L.s("You appear to be offline. Try again when you have a connection.", "Нет сети. Попробуйте, когда появится соединение.")
         case .server(let c, let m): return L.s("The AI service had a problem (\(c)). \(m)", "Ошибка сервиса ИИ (\(c)). \(m)")
@@ -99,6 +140,7 @@ enum Claude {
         req.timeoutInterval = 90
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.setValue(token, forHTTPHeaderField: "X-Unbrick-Token")
+        req.setValue(DeviceId.value, forHTTPHeaderField: "X-Unbrick-Device")
         let body: [String: Any] = ["task": task, "system": system, "messages": messages, "effort": effort]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -119,7 +161,9 @@ enum Claude {
         switch code {
         case 200: return obj
         case 401, 403: throw ClaudeError.notConfigured
-        case 429: throw ClaudeError.rateLimited
+        case 429:
+            let code = (obj["error"] as? [String: Any])?["code"] as? String
+            throw code == "resting" ? ClaudeError.resting : ClaudeError.rateLimited
         case 422: throw ClaudeError.refused
         default:
             let msg = ((obj["error"] as? [String: Any])?["message"] as? String) ?? ""

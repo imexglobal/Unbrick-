@@ -4,13 +4,35 @@ Steps only you can do. The repo does not contain an Anthropic key, a signing cer
 
 ## 1. Anthropic and the server
 
-- [ ] Create an Anthropic API key in the Anthropic console. Do not paste it into the app, Info.plist, or git.
-- [ ] Install Node and deploy `backend/` to Cloudflare Workers: `cd backend && npx wrangler login && npx wrangler deploy`.
-- [ ] Set the secrets (they are not in `wrangler.toml`):
+The worker is capped so six months of use stays inside US$100 of Anthropic credits. It uses Claude Haiku 5.5, reserves the worst-case cost of each call before contacting Anthropic, and records the real token usage after. Defaults (all overridable in `wrangler.toml`):
+
+| Setting | Default |
+| --- | --- |
+| Model | `claude-haiku-5-5` |
+| `MAX_TOKENS` | `1024` (hard ceiling `2048`) |
+| Effort | forced to `low` |
+| History sent | last 6 messages, 800 characters each; lesson prompt trimmed to 4000 plus the worker's policy line |
+| Daily global cap | US$0.55 (`DAILY_BUDGET_USD`) |
+| Total cap | US$100 (`TOTAL_BUDGET_USD`) |
+| Per device | 30 messages per UTC day (`DEVICE_DAILY_LIMIT`), on top of 12 requests per IP per minute |
+| Input price | US$0.10 / million tokens (`PRICE_INPUT_PER_MTOK`) — Haiku 5.5, prompts ≤100k, as of 2026-10-07 |
+| Output price | US$0.50 / million (`PRICE_OUTPUT_PER_MTOK`) |
+| Cache write | US$0.20 / million (`PRICE_CACHE_WRITE_PER_MTOK`) — the 1-hour Haiku rate, used so a later cache cannot be undercounted |
+| Cache read | US$0.01 / million (`PRICE_CACHE_READ_PER_MTOK`) |
+| Reserve | 2 tokens per character of the outgoing JSON (`RESERVE_TOKENS_PER_CHAR`), priced at the higher of the input and cache-write rates, plus `MAX_TOKENS` of output |
+
+US$0.55 × about 182 days is US$100, so the daily pace and the total cap together stop a busy stretch from passing the six-month budget. Only two people are expected to use it; 30 messages a day per device is the extra limit on top of the IP cap. When either money cap or the per-device cap is hit, the worker responds with HTTP 429 and `error.code` `resting`: "AI tutor is resting, try again tomorrow". The iPhone app shows that and, when Apple Intelligence is on, grades on the device instead. Android shows the same sentence. There is no on-device model there.
+
+Spend is stored in one Durable Object (`SPEND` / `SpendGuard`), not KV. A hard cap has to be atomic, and KV is eventually consistent, so two requests at once could both pass. The first `wrangler deploy` applies the migration that creates the object. If that binding is missing, the worker refuses to call Anthropic.
+
+- [ ] Create an Anthropic API key. Do not paste it into the app, Info.plist, or git.
+- [ ] In the Anthropic console, set a workspace or key spend limit of US$100. That is the lock Anthropic itself enforces if the worker's price table is ever wrong.
+- [ ] Install Node and deploy: `cd backend && npx wrangler login && npx wrangler deploy`. Leave the `SpendGuard` migration in place.
+- [ ] Secrets (not in `wrangler.toml`):
   - `npx wrangler secret put ANTHROPIC_API_KEY`
-  - `npx wrangler secret put APP_TOKEN` — a long random string you invent. The same value goes in the apps. It is not the Anthropic key. Anyone who unpacks the app can read it, so the real limit is the per-IP cap plus your Anthropic spend limit.
-- [ ] Optional vars, already defaulted in `wrangler.toml`: `ANTHROPIC_MODEL` (`claude-opus-5-5`), `MAX_TOKENS` (`4096`), `RATE_LIMIT_PER_MINUTE` (`12`). Haiku or Sonnet (`claude-haiku-5-5`, `claude-sonnet-5-5`) are cheaper for short grades. Set an Anthropic spend limit before you ship.
-- [ ] Confirm `GET https://<your-worker>/health` returns `"configured": true`.
+  - `npx wrangler secret put APP_TOKEN` — a long random string. The same value goes in the apps. It is not the Anthropic key. Anyone who unpacks the app can read it.
+- [ ] If you change `ANTHROPIC_MODEL`, update every `PRICE_*` var to that model's published price in the same edit. A cheaper number in the config than the real invoice lets the guard sail past US$100. Haiku 4.5 is a different, more expensive model; do not point the name at it without changing prices.
+- [ ] Confirm `GET https://<your-worker>/health` returns `"configured": true` and `"spendGuard": true`.
 - [ ] Read `backend/README.md` for the full env list.
 
 ## 2. Privacy page
